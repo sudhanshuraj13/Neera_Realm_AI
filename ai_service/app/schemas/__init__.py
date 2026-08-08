@@ -1,4 +1,4 @@
-# Atlas AI — Pydantic v2 Schemas Package
+# Neera Realm AI — Pydantic v2 Schemas Package
 from .orchestrate import (
     CalendarEventSchema,
     UserContext,

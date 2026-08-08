@@ -1,7 +1,7 @@
 {
-  "name": "atlas-ai",
+  "name": "neera-realm-ai",
   "version": "1.0.0",
-  "description": "Atlas AI — Production-grade Telegram Assistant",
+  "description": "Neera Realm AI — Production-grade Telegram Assistant",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",

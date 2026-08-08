@@ -14,7 +14,7 @@ from .base import AgentResult, get_llm
 
 logger = logging.getLogger(__name__)
 
-FINANCIAL_SYSTEM_PROMPT = """You are the Financial Analyst Agent at Atlas AI — an elite, data-driven market intelligence engine.
+FINANCIAL_SYSTEM_PROMPT = """You are the Financial Analyst Agent at Neera Realm AI — an elite, data-driven market intelligence engine.
 
 Your role is to analyze stock queries, market trends, portfolio questions, and investment considerations.
 

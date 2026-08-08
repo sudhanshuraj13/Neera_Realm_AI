@@ -1,1 +1,1 @@
-# Atlas AI — Python Microservice Application Package
+# Neera Realm AI — Python Microservice Application Package

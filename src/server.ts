@@ -6,7 +6,7 @@ import { CalendarService } from "./services/calendarService.js";
 import { getOrCreateUser } from "./db/userRepository.js";
 
 /**
- * Express-based HTTP server for Atlas AI.
+ * Express-based HTTP server for Neera Realm AI.
  * Handles health checks, Google OAuth2 callbacks, and Calendar webhook notifications.
  * Replaces the previous raw http.createServer while preserving the /health endpoint.
  */
@@ -24,7 +24,7 @@ export function startServer(
     res.setHeader("Cache-Control", "no-cache");
     res.json({
       status: "ok",
-      service: "Atlas AI Telegram Bot",
+      service: "Neera Realm AI Telegram Bot",
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
     });
@@ -108,7 +108,7 @@ export function startServer(
           [
             "✅ <b>Google Calendar Connected!</b>",
             "",
-            "Your calendar is now synced with Atlas AI.",
+            "Your calendar is now synced with Neera Realm AI.",
             "You'll receive real-time notifications when meetings are added or changed.",
             "",
             "Try <code>/agenda</code> to see today's meetings.",
@@ -123,7 +123,7 @@ export function startServer(
       res.send(
         `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Atlas AI — Connected</title></head>
+<head><meta charset="utf-8"><title>Neera Realm AI — Connected</title></head>
 <body style="font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0f172a; color: #e2e8f0;">
   <div style="text-align: center; padding: 2rem;">
     <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">✅</h1>

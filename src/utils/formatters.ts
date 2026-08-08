@@ -44,7 +44,7 @@ export function formatFinancialSummary(data: FinancialSummary, ticker: string): 
     "",
     `<i>${escapeHtml(data.whyItMatters)}</i>`,
     "",
-    `⏱️ <i>Powered by Atlas AI</i>`,
+    `⏱️ <i>Powered by Neera Realm AI</i>`,
   ].join("\n");
 }
 
@@ -117,7 +117,7 @@ export function formatDailyBriefing(digest: BriefingDigest): string {
     "💡 <b>Actionable Insight</b>",
     `<i>${escapeHtml(digest.actionableInsight)}</i>`,
     "",
-    "⏱️ <i>Atlas AI Proactive Intelligence</i>"
+    "⏱️ <i>Neera Realm AI Proactive Intelligence</i>"
   );
 
   return lines.join("\n");
@@ -157,6 +157,6 @@ export function formatAgendaBriefing(agenda: AgendaBriefing): string {
     "🎯 <b>Executive Strategy</b>",
     `<i>${escapeHtml(agenda.executiveAdvice)}</i>`,
     "",
-    "⏱️ <i>Powered by Atlas AI Meeting Intelligence</i>",
+    "⏱️ <i>Powered by Neera Realm AI Meeting Intelligence</i>",
   ].join("\n");
 }

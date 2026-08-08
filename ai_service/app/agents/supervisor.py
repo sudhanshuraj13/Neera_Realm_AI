@@ -58,7 +58,7 @@ class OrchestratorState(TypedDict):
 # Node Functions
 # ---------------------------------------------------------------------------
 
-CLASSIFICATION_PROMPT = """You are the Supervisor Agent for Atlas AI, an intelligent financial and productivity assistant.
+CLASSIFICATION_PROMPT = """You are the Supervisor Agent for Neera Realm AI, an intelligent financial and productivity assistant.
 
 Analyze the user's message and determine which specialist agents should handle it.
 

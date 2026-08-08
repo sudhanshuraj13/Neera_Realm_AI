@@ -23,7 +23,7 @@ async function main(): Promise<void> {
 
   // 4. Graceful shutdown handler
   const shutdown = () => {
-    console.log("🛑 Shutting down Atlas AI services...");
+    console.log("🛑 Shutting down Neera Realm AI services...");
     server.close();
     cronTask.stop();
     bot.stop();
@@ -33,10 +33,10 @@ async function main(): Promise<void> {
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
 
-  console.log("🚀 Atlas AI is starting...");
+  console.log("🚀 Neera Realm AI is starting...");
   await bot.start({
     onStart: async (botInfo) => {
-      console.log(`✅ Atlas AI is live as @${botInfo.username}`);
+      console.log(`✅ Neera Realm AI is live as @${botInfo.username}`);
       await setBotCommands(bot);
     },
   });
