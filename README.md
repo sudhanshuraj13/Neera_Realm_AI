@@ -1,7 +1,7 @@
-# 🧭 Neera Realm AI - Financial & Productivity Telegram Assistant
+# 🧭 Neera AI - Financial & Productivity Telegram Assistant
 
 ## 1. Overview
-Neera Realm AI is an autonomous, production-ready Telegram assistant engineered with TypeScript and Node.js that delivers real-time financial market intelligence, portfolio tracking, and executive productivity tooling. The system integrates Yahoo Finance for live market telemetry, synthesizes Google Calendar schedules for pre-meeting stock prep, and triggers personalized morning briefings via a cron-driven scheduler (`node-cron`). All AI-generated briefings and conversational insights are validated and formatted under strict Telegram HTML parsing constraints to ensure seamless, error-free UI delivery.
+Neera AI is an autonomous, production-ready Telegram assistant engineered with TypeScript and Node.js that delivers real-time financial market intelligence, portfolio tracking, and executive productivity tooling. The system integrates Yahoo Finance for live market telemetry, synthesizes Google Calendar schedules for pre-meeting stock prep, and triggers personalized morning briefings via a cron-driven scheduler (`node-cron`). All AI-generated briefings and conversational insights are validated and formatted under strict Telegram HTML parsing constraints to ensure seamless, error-free UI delivery.
 
 Live Bot: @Atlas_newer_Bot
 Demo Video:// [Link to Video Walkthrough]

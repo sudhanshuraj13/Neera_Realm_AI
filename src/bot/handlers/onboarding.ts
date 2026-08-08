@@ -25,7 +25,7 @@ export function registerOnboardingHandlers(bot: Bot): void {
 
     // Build greeting with inline keyboard
     const greeting = [
-      `<b>👋 Welcome to Neera Realm AI, ${user.firstName}!</b>`,
+      `<b>👋 Welcome to Neera AI, ${user.firstName}!</b>`,
       "",
       "I'm your personal market intelligence assistant.",
       "Let's set up your preferences so I can deliver briefings tailored to you.",

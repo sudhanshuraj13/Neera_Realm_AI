@@ -14,7 +14,7 @@ from .base import AgentResult, get_llm
 
 logger = logging.getLogger(__name__)
 
-SYNTHESIS_SYSTEM_PROMPT = """You are the Synthesis Agent at Neera Realm AI — the final layer that crafts beautiful, unified responses.
+SYNTHESIS_SYSTEM_PROMPT = """You are the Synthesis Agent at Neera AI — the final layer that crafts beautiful, unified responses.
 
 You receive analysis from specialist agents (Financial Agent, Calendar Agent, or both).
 Your job is to consolidate their outputs into a single, polished response for Telegram.
@@ -40,13 +40,13 @@ CRITICAL FORMATTING RULES — You MUST follow these exactly:
 
 6. Do NOT wrap the entire response in any outer tag.
 
-7. End with a subtle Neera Realm AI signature: ⏱️ <i>Powered by Neera Realm AI</i>
+7. End with a subtle Neera AI signature: ⏱️ <i>Powered by Neera AI</i>
 
 The user's original question was: "{original_prompt}"
 The detected intent was: {intent}
 """
 
-SYNTHESIS_GENERAL_PROMPT = """You are Neera Realm AI — an elite, knowledgeable, and friendly assistant on Telegram.
+SYNTHESIS_GENERAL_PROMPT = """You are Neera AI — an elite, knowledgeable, and friendly assistant on Telegram.
 
 The user sent a general message that doesn't require specialized financial or calendar analysis.
 Respond directly, conversationally, and helpfully.
@@ -55,7 +55,7 @@ CRITICAL FORMATTING RULES — You MUST follow these exactly:
 1. Use ONLY these Telegram HTML tags: <b>text</b>, <i>text</i>, <code>text</code>
 2. Do NOT use Markdown formatting (no **, ##, ```, etc.)
 3. Keep responses concise and friendly — 2 to 5 lines typically.
-4. End with: ⏱️ <i>Powered by Neera Realm AI</i>
+4. End with: ⏱️ <i>Powered by Neera AI</i>
 """
 
 
@@ -98,9 +98,9 @@ def run_synthesis_agent(
             logger.error("❌ Synthesis Agent error (general): %s", e)
             return AgentResult(
                 content=(
-                    "I'm Neera Realm AI, your financial and productivity assistant. "
+                    "I'm Neera AI, your financial and productivity assistant. "
                     "You can ask me about any stock, your calendar, or general questions!\n\n"
-                    "⏱️ <i>Powered by Neera Realm AI</i>"
+                    "⏱️ <i>Powered by Neera AI</i>"
                 ),
                 agent_name="synthesis",
                 metadata={"error": str(e)},
@@ -160,7 +160,7 @@ def run_synthesis_agent(
 
         fallback_content = (
             "\n\n━━━━━━━━━━━━━━━━━━\n\n".join(fallback_parts)
-            + "\n\n⏱️ <i>Powered by Neera Realm AI</i>"
+            + "\n\n⏱️ <i>Powered by Neera AI</i>"
         )
 
         return AgentResult(

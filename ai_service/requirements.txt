@@ -1,4 +1,4 @@
-# Neera Realm AI — Python Microservice Dependencies
+# Neera AI — Python Microservice Dependencies
 # FastAPI + Server
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0

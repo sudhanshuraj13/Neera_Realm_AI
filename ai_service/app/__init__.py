@@ -1,1 +1,1 @@
-# Neera Realm AI — Python Microservice Application Package
+# Neera AI — Python Microservice Application Package

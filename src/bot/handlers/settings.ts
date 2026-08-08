@@ -57,7 +57,7 @@ function renderSettingsHtml(
   industries: string[]
 ): string {
   return [
-    `⚙️ <b>Neera Realm AI Settings — ${firstName}</b>`,
+    `⚙️ <b>Neera AI Settings — ${firstName}</b>`,
     "",
     `📋 <b>Current Watchlist:</b> <code>${watchlist.join(", ") || "None"}</code>`,
     `⏰ <b>Scheduled Briefing:</b> <code>${briefingTime} UTC</code>`,

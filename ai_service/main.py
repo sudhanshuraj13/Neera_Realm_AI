@@ -1,7 +1,7 @@
 """
-Neera Realm AI — Python Multi-Agent Microservice
+Neera AI — Python Multi-Agent Microservice
 
-FastAPI server providing the AI orchestration engine for Neera Realm AI.
+FastAPI server providing the AI orchestration engine for Neera AI.
 Node.js (Gateway) → POST /api/v1/orchestrate → LangGraph Pipeline → Response
 
 Endpoints:
@@ -42,7 +42,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("neera_realm_ai_service")
+logger = logging.getLogger("neera_ai_service")
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ logger = logging.getLogger("neera_realm_ai_service")
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup and shutdown events."""
     # Startup
-    logger.info("🚀 Neera Realm AI Python Microservice starting...")
+    logger.info("🚀 Neera AI Python Microservice starting...")
     logger.info("📦 LangGraph multi-agent engine initialized")
 
     # Log configured providers (without exposing keys)
@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    logger.info("🛑 Neera Realm AI Python Microservice shutting down...")
+    logger.info("🛑 Neera AI Python Microservice shutting down...")
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +81,8 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="Neera Realm AI — Multi-Agent Engine",
-    description="Python microservice powering the LangGraph multi-agent orchestration for Neera Realm AI.",
+    title="Neera AI — Multi-Agent Engine",
+    description="Python microservice powering the LangGraph multi-agent orchestration for Neera AI.",
     version="2.0.0",
     lifespan=lifespan,
 )
@@ -106,7 +106,7 @@ async def health_check():
     """Returns microservice health status."""
     return {
         "status": "ok",
-        "service": "Neera Realm AI Agent Engine",
+        "service": "Neera AI Agent Engine",
         "version": "2.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

@@ -3,7 +3,7 @@ import type { OAuth2Client } from "google-auth-library";
 import { prisma } from "../db/client.js";
 
 /**
- * AuthService — Handles Google OAuth2 flow for Neera Realm AI.
+ * AuthService — Handles Google OAuth2 flow for Neera AI.
  * Generates consent URLs, exchanges authorization codes for tokens,
  * and provides authenticated OAuth2 clients for downstream API calls.
  */

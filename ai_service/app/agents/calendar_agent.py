@@ -14,7 +14,7 @@ from .base import AgentResult, get_llm
 
 logger = logging.getLogger(__name__)
 
-CALENDAR_SYSTEM_PROMPT = """You are the Calendar Intelligence Agent at Neera Realm AI — an executive-grade schedule analyst and chief of staff.
+CALENDAR_SYSTEM_PROMPT = """You are the Calendar Intelligence Agent at Neera AI — an executive-grade schedule analyst and chief of staff.
 
 You receive the user's actual calendar events for today (pre-fetched from Google Calendar).
 Your job is to analyze their schedule and provide actionable insights.

@@ -1,5 +1,5 @@
 /**
- * Calendar Service for Neera Realm AI.
+ * Calendar Service for Neera AI.
  * Handles Google Calendar event fetching, webhook registration for push
  * notifications, and incremental sync via sync tokens.
  * Falls back to mock events when Google credentials are not configured.
