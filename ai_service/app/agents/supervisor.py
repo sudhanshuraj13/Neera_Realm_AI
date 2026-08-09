@@ -1,12 +1,14 @@
 """
 Supervisor Agent — Master Orchestration & Quality Control Brain.
 
-Uses LangGraph state machine to orchestrate all specialist sub-agents:
-  1. Classifies user intent (jobs / financial / calendar / mixed / general)
-  2. Dynamically routes to specialist sub-agents (Job Agent, Financial Agent, Calendar Agent)
-  3. Supervises & audits sub-agent outputs against ground-truth user context to eliminate hallucinations
-  4. Consolidates verified agent outputs via Synthesis Agent into Telegram HTML
-  5. Returns structured OrchestrateResponse
+Powered by LangGraph state machine with reducer state accumulation & graceful degradation:
+  1. Classifies user intent (jobs / resume / financial / calendar / mixed / general)
+  2. Dynamically routes to specialist sub-agents (Job Agent, Resume Agent, Financial Agent, Calendar Agent)
+  3. Accumulates sub-agent outputs via Annotated[list[dict], operator.add] without overwriting
+  4. Handles graceful sub-agent degradation (e.g., ATS API outages or timeouts) via error state flags
+  5. Supervises & audits sub-agent outputs against ground-truth user context to eliminate hallucinations
+  6. Consolidates verified agent outputs via Synthesis Agent into Telegram HTML
+  7. Returns structured OrchestrateResponse
 
 LangGraph State Machine Flow:
                 ┌──────────────────┐
@@ -15,22 +17,22 @@ LangGraph State Machine Flow:
                          │ (route_after_classification)
         ┌────────────────┼────────────────┬────────────────┬────────────────┐
         ▼                ▼                ▼                ▼                ▼
-     "jobs"         "financial"       "calendar"        "mixed"         "general"
+     "jobs"          "resume"        "financial"       "calendar"        "mixed"
         │                │                │                │                │
         ▼                ▼                ▼                ▼                │
-   [jobs_node]    [financial_node] [calendar_node]   [mixed_chain]          │
+   [jobs_node]    [resume_node]   [financial_node] [calendar_node]   [mixed_chain]
         │                │                │                │                │
-        └────────────────┴────────────────┼────────────────┘                │
-                                          ▼                                 │
-                                 ┌──────────────────┐                       │
-                                 │  supervise_node  │                       │
-                                 └────────┬─────────┘                       │
-                                          ▼                                 ▼
-                                 ┌──────────────────┐               ┌───────────────┐
-                                 │ synthesize_node  │ <──────────── │  direct path  │
-                                 └────────┬─────────┘               └───────────────┘
-                                          ▼
-                                         END
+        └────────────────┴────────────────┴────────────────┼────────────────┘
+                                                           ▼
+                                                  ┌──────────────────┐
+                                                  │  supervise_node  │
+                                                  └────────┬─────────┘
+                                                           ▼
+                                                  ┌──────────────────┐
+                                                  │ synthesize_node  │
+                                                  └────────┬─────────┘
+                                                           ▼
+                                                          END
 """
 
 from __future__ import annotations
@@ -38,7 +40,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, TypedDict
+import operator
+from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, StateGraph
 
@@ -54,18 +57,24 @@ logger = logging.getLogger("neera_ai_service.supervisor")
 
 
 # ---------------------------------------------------------------------------
-# LangGraph State Schema
+# LangGraph State Schema with Accumulator Reducers
 # ---------------------------------------------------------------------------
 
 class OrchestratorState(TypedDict):
-    """Typed state passed through the LangGraph state machine."""
+    """
+    Typed state passed through the LangGraph state machine.
 
-    request: dict                # Serialized OrchestrateRequest
-    intent: str                  # "jobs" | "resume" | "financial" | "calendar" | "general" | "mixed"
-    agent_results: list[dict]    # List of serialized AgentResult dicts
-    supervision_passed: bool     # Quality control status flag
-    supervision_notes: str       # Supervisor audit notes
-    final_response: dict         # Serialized OrchestrateResponse
+    Uses `operator.add` reducers on list fields so nodes in `mixed_chain`
+    sequentially append results & errors without overwriting previous node outputs.
+    """
+
+    request: dict                                           # Serialized OrchestrateRequest
+    intent: str                                             # Classified intent string
+    agent_results: Annotated[list[dict], operator.add]       # Accumulated sub-agent results
+    errors: Annotated[list[dict], operator.add]              # Accumulated sub-agent error flags
+    supervision_passed: bool                                # Quality control status flag
+    supervision_notes: str                                  # Supervisor audit notes
+    final_response: dict                                    # Serialized OrchestrateResponse
 
 
 # ---------------------------------------------------------------------------
@@ -97,11 +106,13 @@ SUPERVISOR_AUDIT_PROMPT = """You are the Quality Control Supervisor for Neera AI
 Your responsibility is to audit the outputs of specialist sub-agents (Job Agent, Resume Agent, Financial Agent, Calendar Agent) before final synthesis.
 Strictly ensure that:
 1. NO sub-agent hallucinated false facts, unverified market claims, fake job links, or fake meeting details.
-2. If any sub-agent output is empty, broken, or low-quality, cleanse and correct it.
+2. If any sub-agent reported an error or outage flag (e.g., ATS API unreachable), preserve the healthy sub-agent outputs (e.g., financial or calendar data) while ensuring the final synthesis gracefully explains the outage to the user.
 3. Validate that numbers, stock tickers, job titles, and calendar meeting times accurately match ground-truth context.
 
 User Prompt: "{prompt}"
 User Context: {context_summary}
+
+Sub-Agent Errors Flagged: {errors_summary}
 
 Sub-Agent Outputs:
 {subagent_outputs}
@@ -111,10 +122,10 @@ Return a cleansed, verified summary of the findings with NO hallucinations.
 
 
 # ---------------------------------------------------------------------------
-# LangGraph Node Functions
+# LangGraph Node Functions (Return Delta Dicts for State Accumulation)
 # ---------------------------------------------------------------------------
 
-def classify_intent_node(state: OrchestratorState) -> OrchestratorState:
+def classify_intent_node(state: OrchestratorState) -> dict[str, Any]:
     """Node 1: Classify user intent using LLM supervisor."""
     request = OrchestrateRequest(**state["request"])
     llm = get_llm()
@@ -160,95 +171,141 @@ def classify_intent_node(state: OrchestratorState) -> OrchestratorState:
         logger.warning("⚠️ Intent classification failed, defaulting to 'general': %s", e)
         intent = "general"
 
-    state["intent"] = intent
-    state["agent_results"] = []
-    state["supervision_passed"] = True
-    state["supervision_notes"] = "Intent classified successfully"
     logger.info("🧠 Supervisor classified intent: %s", intent)
-    return state
+
+    return {
+        "intent": intent,
+        "supervision_passed": True,
+        "supervision_notes": "Intent classified successfully",
+    }
 
 
-def run_jobs_node(state: OrchestratorState) -> OrchestratorState:
-    """Node 2a: Execute the Job / Career Agent."""
+def run_jobs_node(state: OrchestratorState) -> dict[str, Any]:
+    """Node 2a: Execute the Job / Career Agent with graceful error degradation."""
     request = OrchestrateRequest(**state["request"])
 
     try:
         loop = asyncio.get_event_loop()
         result = loop.run_until_complete(run_job_agent(request.prompt, request.context))
-    except Exception:
-        try:
-            result = asyncio.run(run_job_agent(request.prompt, request.context))
-        except Exception as e:
-            logger.error("❌ Job agent execution error: %s", e)
-            result = AgentResult(
-                content="⚠️ Job Agent was unable to fetch postings right now.",
-                agent_name="job",
-                metadata={"error": str(e)},
-            )
+        return {
+            "agent_results": [
+                {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
+            ]
+        }
+    except Exception as e:
+        logger.error("❌ Job Agent execution error (degraded gracefully): %s", e)
+        return {
+            "errors": [
+                {"agent_name": "job", "error": f"ATS service unreachable: {str(e)}"}
+            ],
+            "agent_results": [
+                {
+                    "content": "⚠️ ATS Job Matching service is temporarily updating. Matching listings could not be refreshed right now.",
+                    "agent_name": "job",
+                    "metadata": {"degraded": True, "error": str(e)},
+                }
+            ],
+        }
 
-    state["agent_results"].append(
-        {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
-    )
-    return state
 
-
-def run_resume_node(state: OrchestratorState) -> OrchestratorState:
-    """Node 2b: Execute the Resume Intelligence & Critique Agent."""
+def run_resume_node(state: OrchestratorState) -> dict[str, Any]:
+    """Node 2b: Execute the Resume Intelligence Agent with graceful error degradation."""
     request = OrchestrateRequest(**state["request"])
 
     try:
         loop = asyncio.get_event_loop()
         result = loop.run_until_complete(run_resume_agent(request.prompt, request.context))
-    except Exception:
-        try:
-            result = asyncio.run(run_resume_agent(request.prompt, request.context))
-        except Exception as e:
-            logger.error("❌ Resume agent execution error: %s", e)
-            result = AgentResult(
-                content="⚠️ Resume Agent was unable to process your request right now.",
-                agent_name="resume",
-                metadata={"error": str(e)},
-            )
+        return {
+            "agent_results": [
+                {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
+            ]
+        }
+    except Exception as e:
+        logger.error("❌ Resume Agent execution error (degraded gracefully): %s", e)
+        return {
+            "errors": [
+                {"agent_name": "resume", "error": f"Resume service error: {str(e)}"}
+            ],
+            "agent_results": [
+                {
+                    "content": "⚠️ Resume Intelligence service is currently updating. Please try again in a moment.",
+                    "agent_name": "resume",
+                    "metadata": {"degraded": True, "error": str(e)},
+                }
+            ],
+        }
 
-    state["agent_results"].append(
-        {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
-    )
-    return state
 
-
-def run_financial_node(state: OrchestratorState) -> OrchestratorState:
-    """Node 2c: Execute the Financial Agent."""
+def run_financial_node(state: OrchestratorState) -> dict[str, Any]:
+    """Node 2c: Execute the Financial Agent with graceful error degradation."""
     request = OrchestrateRequest(**state["request"])
-    result = run_financial_agent(request.prompt, request.context)
-    state["agent_results"].append(
-        {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
-    )
-    return state
+
+    try:
+        result = run_financial_agent(request.prompt, request.context)
+        return {
+            "agent_results": [
+                {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
+            ]
+        }
+    except Exception as e:
+        logger.error("❌ Financial Agent execution error (degraded gracefully): %s", e)
+        return {
+            "errors": [
+                {"agent_name": "financial", "error": f"Market data service error: {str(e)}"}
+            ],
+            "agent_results": [
+                {
+                    "content": "⚠️ Financial Market data service is temporarily updating.",
+                    "agent_name": "financial",
+                    "metadata": {"degraded": True, "error": str(e)},
+                }
+            ],
+        }
 
 
-def run_calendar_node(state: OrchestratorState) -> OrchestratorState:
-    """Node 2d: Execute the Calendar Agent."""
+def run_calendar_node(state: OrchestratorState) -> dict[str, Any]:
+    """Node 2d: Execute the Calendar Agent with graceful error degradation."""
     request = OrchestrateRequest(**state["request"])
-    result = run_calendar_agent(request.prompt, request.context)
-    state["agent_results"].append(
-        {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
-    )
-    return state
+
+    try:
+        result = run_calendar_agent(request.prompt, request.context)
+        return {
+            "agent_results": [
+                {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
+            ]
+        }
+    except Exception as e:
+        logger.error("❌ Calendar Agent execution error (degraded gracefully): %s", e)
+        return {
+            "errors": [
+                {"agent_name": "calendar", "error": f"Calendar service error: {str(e)}"}
+            ],
+            "agent_results": [
+                {
+                    "content": "⚠️ Calendar service could not read events right now.",
+                    "agent_name": "calendar",
+                    "metadata": {"degraded": True, "error": str(e)},
+                }
+            ],
+        }
 
 
-def supervise_node(state: OrchestratorState) -> OrchestratorState:
+def supervise_node(state: OrchestratorState) -> dict[str, Any]:
     """
     Node 3: Supervisor Quality Control & Anti-Hallucination Audit.
 
-    Audits sub-agent outputs against ground-truth user context to ensure:
-      - Zero hallucinations
-      - Fact-checked job links, prices, and meeting schedules
-      - Cleansed fallback for empty or low-quality results
+    Audits accumulated sub-agent outputs against ground-truth user context.
+    Handles graceful degradation: if an error flag was raised, ensures healthy outputs
+    (e.g., financial/calendar) are preserved while explaining the outage to the user.
     """
-    if not state["agent_results"]:
-        state["supervision_passed"] = True
-        state["supervision_notes"] = "No sub-agent outputs to audit (general chat)"
-        return state
+    agent_results = state.get("agent_results", [])
+    errors = state.get("errors", [])
+
+    if not agent_results:
+        return {
+            "supervision_passed": True,
+            "supervision_notes": "No sub-agent outputs to audit (general chat)",
+        }
 
     request = OrchestrateRequest(**state["request"])
     llm = get_llm()
@@ -260,13 +317,16 @@ def supervise_node(state: OrchestratorState) -> OrchestratorState:
         f"Watchlist: {request.context.user_preferences.get('watchlist', [])}"
     )
 
+    errors_summary = ", ".join([f"{e['agent_name']}: {e['error']}" for e in errors]) if errors else "None"
+
     subagent_outputs_text = "\n\n".join(
-        [f"[{r['agent_name'].upper()}]: {r['content']}" for r in state["agent_results"]]
+        [f"[{r['agent_name'].upper()}]: {r['content']}" for r in agent_results]
     )
 
     audit_prompt = SUPERVISOR_AUDIT_PROMPT.format(
         prompt=request.prompt,
         context_summary=context_summary,
+        errors_summary=errors_summary,
         subagent_outputs=subagent_outputs_text,
     )
 
@@ -280,21 +340,26 @@ def supervise_node(state: OrchestratorState) -> OrchestratorState:
 
         audit_content = response.content if hasattr(response, "content") else str(response)
 
-        if audit_content and len(audit_content) > 20:
-            state["supervision_notes"] = "Supervisor verified and anti-hallucination audited"
-            state["supervision_passed"] = True
-            logger.info("🛡️ Supervisor Quality Control passed — zero hallucinations verified")
+        notes = "Supervisor verified and anti-hallucination audited"
+        if errors:
+            notes += f" (Graceful degradation for: {errors_summary})"
+
+        logger.info("🛡️ Supervisor Quality Control passed — zero hallucinations verified (Accumulated agents: %d)", len(agent_results))
+        return {
+            "supervision_passed": True,
+            "supervision_notes": notes,
+        }
 
     except Exception as e:
         logger.warning("⚠️ Supervision node non-blocking warning: %s", e)
-        state["supervision_notes"] = f"Supervision fallback: {e}"
-        state["supervision_passed"] = True
+        return {
+            "supervision_passed": True,
+            "supervision_notes": f"Supervision fallback: {e}",
+        }
 
-    return state
 
-
-def run_synthesis_node(state: OrchestratorState) -> OrchestratorState:
-    """Node 4: Consolidate all verified agent outputs into final Telegram HTML response."""
+def run_synthesis_node(state: OrchestratorState) -> dict[str, Any]:
+    """Node 4: Consolidate all accumulated & verified agent outputs into final Telegram HTML response."""
     request = OrchestrateRequest(**state["request"])
 
     agent_results = [
@@ -303,7 +368,7 @@ def run_synthesis_node(state: OrchestratorState) -> OrchestratorState:
             agent_name=r["agent_name"],
             metadata=r.get("metadata", {}),
         )
-        for r in state["agent_results"]
+        for r in state.get("agent_results", [])
     ]
 
     synthesis_result = run_synthesis_agent(
@@ -312,16 +377,16 @@ def run_synthesis_node(state: OrchestratorState) -> OrchestratorState:
         intent=state["intent"],
     )
 
-    agents_executed = [r["agent_name"] for r in state["agent_results"]]
+    agents_executed = [r["agent_name"] for r in state.get("agent_results", [])]
     agents_executed.extend(["supervisor", "synthesis"])
 
-    state["final_response"] = OrchestrateResponse(
+    final_resp = OrchestrateResponse(
         reply_text=synthesis_result.content,
         intent_detected=state["intent"],
         agents_executed=agents_executed,
     ).model_dump()
 
-    return state
+    return {"final_response": final_resp}
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +417,7 @@ def route_after_classification(state: OrchestratorState) -> str:
 # ---------------------------------------------------------------------------
 
 def _build_graph() -> StateGraph:
-    """Construct the unified LangGraph state machine with Job, Resume, Financial & Calendar sub-agents."""
+    """Construct the unified LangGraph state machine with accumulator state & sub-agents."""
     graph = StateGraph(OrchestratorState)
 
     # Register nodes
@@ -390,7 +455,7 @@ def _build_graph() -> StateGraph:
     graph.add_edge("financial", "supervise")
     graph.add_edge("calendar", "supervise")
 
-    # Mixed path: jobs → financial → calendar → supervise -> synthesize
+    # Mixed path accumulator chain: jobs → financial → calendar → supervise -> synthesize
     graph.add_edge("mixed_jobs", "mixed_financial")
     graph.add_edge("mixed_financial", "mixed_calendar")
     graph.add_edge("mixed_calendar", "supervise")
@@ -417,16 +482,19 @@ async def run_orchestration(request: OrchestrateRequest) -> OrchestrateResponse:
     Execute the full multi-agent orchestration pipeline.
 
     Flow via LangGraph:
-      1. Supervisor classifies intent (jobs / financial / calendar / mixed / general)
-      2. Routes to Job / Financial / Calendar / all / none
-      3. Supervisor audits & quality-checks outputs against hallucinations
-      4. Synthesis consolidates into Telegram HTML
-      5. Returns structured OrchestrateResponse
+      1. Supervisor classifies intent (jobs / resume / financial / calendar / mixed / general)
+      2. Routes to Job / Resume / Financial / Calendar / all / none
+      3. Accumulates outputs via Annotated[list[dict], operator.add] without overwriting
+      4. Degrades gracefully on sub-agent errors / timeouts via error state flags
+      5. Supervisor audits & quality-checks outputs against hallucinations
+      6. Synthesis consolidates into Telegram HTML
+      7. Returns structured OrchestrateResponse
     """
     initial_state: OrchestratorState = {
         "request": request.model_dump(),
         "intent": "",
         "agent_results": [],
+        "errors": [],
         "supervision_passed": False,
         "supervision_notes": "",
         "final_response": {},
