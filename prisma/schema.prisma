@@ -23,6 +23,10 @@ model User {
   webhookChannelId  String?
   calendarSyncToken String?
 
+  // Career intelligence (Phase 1)
+  resumeJson Json?    @db.JsonB   // Extracted skills, experience, projects, target roles
+  isPro      Boolean  @default(false) // Future monetization flag
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

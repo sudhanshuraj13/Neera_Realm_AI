@@ -31,7 +31,9 @@ load_dotenv(_root_dir / ".env")
 load_dotenv()  # Fallback standard search
 
 from app.agents import run_orchestration  # noqa: E402
+from app.agents.resume_agent import parse_resume  # noqa: E402
 from app.schemas import OrchestrateRequest, OrchestrateResponse  # noqa: E402
+from app.schemas.resume import ResumeParseRequest, ResumeParseResponse  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging Configuration
@@ -157,6 +159,49 @@ async def orchestrate(request: OrchestrateRequest):
             },
         )
 
+
+@app.post("/api/v1/resume/parse", response_model=ResumeParseResponse)
+async def resume_parse(request: ResumeParseRequest):
+    """
+    Resume parsing endpoint.
+
+    Flow:
+      1. Receives raw text extracted from a PDF resume (sent by Node.js gateway)
+      2. Uses LLM with structured output to extract a nested ResumeProfile
+      3. Returns the structured profile JSON to the Node.js caller
+    """
+    start_time = time.perf_counter()
+
+    logger.info(
+        "📄 Resume parse request — user_id=%s, text_length=%d chars",
+        request.user_id,
+        len(request.raw_text),
+    )
+
+    try:
+        profile = await parse_resume(request.raw_text)
+
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "✅ Resume parsed — role=%s, skills=%d, elapsed=%.0fms",
+            profile.primary_role,
+            len(profile.skills),
+            elapsed_ms,
+        )
+
+        return ResumeParseResponse(profile=profile)
+
+    except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("❌ Resume parsing failed after %.0fms: %s", elapsed_ms, e)
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Resume parsing failed",
+                "message": str(e),
+            },
+        )
 
 # ---------------------------------------------------------------------------
 # Standalone runner (python main.py)

@@ -139,6 +139,32 @@ export async function orchestrate(
   return data;
 }
 
+/** Response from POST /api/v1/resume/parse. */
+export interface ResumeParseResponse {
+  profile: Record<string, unknown>;
+}
+
+/**
+ * Send raw resume text to the Python AI engine for structured extraction.
+ *
+ * @param userId   Internal user ID from Neon PostgreSQL
+ * @param rawText  Raw text extracted from a PDF resume
+ * @returns Structured resume profile as JSON
+ */
+export async function parseResume(
+  userId: string,
+  rawText: string
+): Promise<ResumeParseResponse> {
+  const { data } = await aiClient.post<ResumeParseResponse>(
+    "/api/v1/resume/parse",
+    {
+      user_id: userId,
+      raw_text: rawText,
+    }
+  );
+  return data;
+}
+
 /** Type guard: check if an error is a normalized AiServiceError. */
 export function isAiServiceError(err: unknown): err is AiServiceError {
   return (
