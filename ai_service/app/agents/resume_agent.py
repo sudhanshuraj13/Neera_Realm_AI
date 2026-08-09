@@ -86,3 +86,75 @@ async def parse_resume(raw_text: str) -> ResumeProfile:
     )
 
     return result
+
+
+async def run_resume_agent(prompt: str, context: Any) -> Any:
+    """
+    Sub-Agent interface function for Resume Intelligence & Critique Agent.
+
+    Args:
+        prompt: Raw user message text
+        context: UserContext model or dictionary
+
+    Returns:
+        AgentResult with formatted Telegram HTML resume feedback/critique
+    """
+    from app.agents.base import AgentResult
+
+    user_prefs = {}
+    if hasattr(context, "user_preferences"):
+        user_prefs = context.user_preferences
+    elif isinstance(context, dict):
+        user_prefs = context.get("user_preferences", {})
+
+    resume_profile = user_prefs.get("resumeJson") or user_prefs.get("resume_profile") or {}
+
+    if not resume_profile:
+        content = (
+            "<b>📄 Resume Intelligence</b>\n\n"
+            "You haven't uploaded a resume yet!\n\n"
+            "👉 Please upload your resume PDF using <code>/resume</code> or tap <b>📄 Upload Resume</b> so I can analyze your career profile and provide feedback!"
+        )
+        return AgentResult(
+            content=content,
+            agent_name="resume",
+            metadata={"status": "no_resume"},
+        )
+
+    # Candidate has an uploaded profile — generate resume intelligence & feedback using LLM
+    primary_role = resume_profile.get("primary_role", "Software Engineer")
+    skills = resume_profile.get("skills", [])
+    target_roles = resume_profile.get("target_roles", [])
+    experience = resume_profile.get("experience", [])
+    projects = resume_profile.get("projects", [])
+
+    llm = get_llm()
+
+    critique_prompt = f"""You are the Resume Intelligence Specialist for Neera AI.
+
+Analyze the candidate's stored resume profile and answer their query: "{prompt}"
+
+Candidate Profile Summary:
+- Primary Role: {primary_role}
+- Skills: {', '.join(skills)}
+- Target Roles: {', '.join(target_roles)}
+- Total Experience Entries: {len(experience)}
+- Projects Extracted: {len(projects)}
+
+Provide clear, actionable, professional career intelligence and resume advice.
+Format using ONLY Telegram HTML tags (<b>, <i>, <code>). Keep it concise (4-8 lines).
+"""
+
+    response = llm.invoke([
+        {"role": "system", "content": critique_prompt},
+        {"role": "user", "content": prompt},
+    ])
+
+    raw_text = response.content if hasattr(response, "content") else str(response)
+
+    return AgentResult(
+        content=raw_text,
+        agent_name="resume",
+        metadata={"role": primary_role, "skills_count": len(skills)},
+    )
+

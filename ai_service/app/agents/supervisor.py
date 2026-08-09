@@ -47,6 +47,7 @@ from .base import AgentResult, get_llm
 from .calendar_agent import run_calendar_agent
 from .financial import run_financial_agent
 from .job_agent import run_job_agent
+from .resume_agent import run_resume_agent
 from .synthesis import run_synthesis_agent
 
 logger = logging.getLogger("neera_ai_service.supervisor")
@@ -60,7 +61,7 @@ class OrchestratorState(TypedDict):
     """Typed state passed through the LangGraph state machine."""
 
     request: dict                # Serialized OrchestrateRequest
-    intent: str                  # "jobs" | "financial" | "calendar" | "general" | "mixed"
+    intent: str                  # "jobs" | "resume" | "financial" | "calendar" | "general" | "mixed"
     agent_results: list[dict]    # List of serialized AgentResult dicts
     supervision_passed: bool     # Quality control status flag
     supervision_notes: str       # Supervisor audit notes
@@ -76,14 +77,15 @@ CLASSIFICATION_PROMPT = """You are the Master Supervisor Agent for Neera AI — 
 Analyze the user's message and determine which specialist sub-agents should handle it.
 
 Classify the intent as EXACTLY one of:
-- "jobs": Job searches, career questions, open roles, ATS recommendations, resume matching, hiring, hiring trends, tech positions
+- "jobs": Job searches, open roles, ATS recommendations, resume job matching, hiring trends, tech positions
+- "resume": Resume critique, resume analysis, resume review, skill extraction questions, resume improvement advice
 - "financial": Stock queries, market analysis, portfolio questions, investment advice, price checks, company analysis
 - "calendar": Schedule questions, meeting conflicts, free time slots, agenda planning, meeting prep
 - "mixed": The message combines MULTIPLE topics (e.g., jobs AND financial, or jobs AND calendar, or financial AND calendar)
-- "general": Casual conversation, greetings, general knowledge, or anything not specific to jobs, financial, or calendar
+- "general": Casual conversation, greetings, general knowledge, or anything not specific to jobs, resume, financial, or calendar
 
 You MUST respond with ONLY a raw JSON object:
-{{"intent": "jobs" | "financial" | "calendar" | "mixed" | "general"}}
+{{"intent": "jobs" | "resume" | "financial" | "calendar" | "mixed" | "general"}}
 
 User Has Resume: {has_resume}
 User's Calendar: {num_events} events today.
@@ -92,7 +94,7 @@ User's Watchlist: {watchlist}
 
 SUPERVISOR_AUDIT_PROMPT = """You are the Quality Control Supervisor for Neera AI.
 
-Your responsibility is to audit the outputs of specialist sub-agents (Job Agent, Financial Agent, Calendar Agent) before final synthesis.
+Your responsibility is to audit the outputs of specialist sub-agents (Job Agent, Resume Agent, Financial Agent, Calendar Agent) before final synthesis.
 Strictly ensure that:
 1. NO sub-agent hallucinated false facts, unverified market claims, fake job links, or fake meeting details.
 2. If any sub-agent output is empty, broken, or low-quality, cleanse and correct it.
@@ -151,7 +153,7 @@ def classify_intent_node(state: OrchestratorState) -> OrchestratorState:
         parsed = json.loads(cleaned)
         intent = parsed.get("intent", "general")
 
-        if intent not in ("jobs", "financial", "calendar", "mixed", "general"):
+        if intent not in ("jobs", "resume", "financial", "calendar", "mixed", "general"):
             intent = "general"
 
     except Exception as e:
@@ -190,8 +192,32 @@ def run_jobs_node(state: OrchestratorState) -> OrchestratorState:
     return state
 
 
+def run_resume_node(state: OrchestratorState) -> OrchestratorState:
+    """Node 2b: Execute the Resume Intelligence & Critique Agent."""
+    request = OrchestrateRequest(**state["request"])
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(run_resume_agent(request.prompt, request.context))
+    except Exception:
+        try:
+            result = asyncio.run(run_resume_agent(request.prompt, request.context))
+        except Exception as e:
+            logger.error("❌ Resume agent execution error: %s", e)
+            result = AgentResult(
+                content="⚠️ Resume Agent was unable to process your request right now.",
+                agent_name="resume",
+                metadata={"error": str(e)},
+            )
+
+    state["agent_results"].append(
+        {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
+    )
+    return state
+
+
 def run_financial_node(state: OrchestratorState) -> OrchestratorState:
-    """Node 2b: Execute the Financial Agent."""
+    """Node 2c: Execute the Financial Agent."""
     request = OrchestrateRequest(**state["request"])
     result = run_financial_agent(request.prompt, request.context)
     state["agent_results"].append(
@@ -201,7 +227,7 @@ def run_financial_node(state: OrchestratorState) -> OrchestratorState:
 
 
 def run_calendar_node(state: OrchestratorState) -> OrchestratorState:
-    """Node 2c: Execute the Calendar Agent."""
+    """Node 2d: Execute the Calendar Agent."""
     request = OrchestrateRequest(**state["request"])
     result = run_calendar_agent(request.prompt, request.context)
     state["agent_results"].append(
@@ -308,6 +334,8 @@ def route_after_classification(state: OrchestratorState) -> str:
 
     if intent == "jobs":
         return "jobs"
+    elif intent == "resume":
+        return "resume"
     elif intent == "financial":
         return "financial"
     elif intent == "calendar":
@@ -324,12 +352,13 @@ def route_after_classification(state: OrchestratorState) -> str:
 # ---------------------------------------------------------------------------
 
 def _build_graph() -> StateGraph:
-    """Construct the unified LangGraph state machine with Job, Financial & Calendar sub-agents."""
+    """Construct the unified LangGraph state machine with Job, Resume, Financial & Calendar sub-agents."""
     graph = StateGraph(OrchestratorState)
 
     # Register nodes
     graph.add_node("classify", classify_intent_node)
     graph.add_node("jobs", run_jobs_node)
+    graph.add_node("resume", run_resume_node)
     graph.add_node("financial", run_financial_node)
     graph.add_node("calendar", run_calendar_node)
     graph.add_node("mixed_jobs", run_jobs_node)
@@ -347,6 +376,7 @@ def _build_graph() -> StateGraph:
         route_after_classification,
         {
             "jobs": "jobs",
+            "resume": "resume",
             "financial": "financial",
             "calendar": "calendar",
             "mixed_jobs": "mixed_jobs",
@@ -356,6 +386,7 @@ def _build_graph() -> StateGraph:
 
     # Single-agent paths → supervise -> synthesize
     graph.add_edge("jobs", "supervise")
+    graph.add_edge("resume", "supervise")
     graph.add_edge("financial", "supervise")
     graph.add_edge("calendar", "supervise")
 
