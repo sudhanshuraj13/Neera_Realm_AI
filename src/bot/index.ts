@@ -15,8 +15,9 @@ export async function setBotCommands(bot: Bot): Promise<void> {
   try {
     await bot.api.setMyCommands([
       { command: "briefing", description: "📊 Daily market intelligence digest" },
-      { command: "agenda", description: "📅 Today's meetings & company prep" },
+      { command: "jobs", description: "💼 Live ATS job postings matching your resume" },
       { command: "resume", description: "📄 Upload your resume PDF" },
+      { command: "agenda", description: "📅 Today's meetings & company prep" },
       { command: "login", description: "🔐 Connect your Google Calendar" },
       { command: "settings", description: "⚙️ Watchlist, industry & briefing time" },
       { command: "start", description: "👋 Welcome & onboarding setup" },

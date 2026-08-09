@@ -9,6 +9,7 @@
  */
 
 import type { Bot } from "grammy";
+import { InlineKeyboard } from "grammy";
 import axios from "axios";
 import { PDFParse } from "pdf-parse";
 import { config } from "../../config/index.js";
@@ -17,6 +18,7 @@ import { prisma } from "../../db/client.js";
 import { sendSafeTelegramMessage } from "../../utils/telegram.js";
 import {
   parseResume,
+  matchJobs,
   isAiServiceError,
 } from "../../services/aiService.js";
 
@@ -137,9 +139,21 @@ export function registerResumeHandlers(bot: Bot): void {
       });
 
       // 6. Reply with success
+      const jobKeyboard = new InlineKeyboard().text(
+        "💼 View Matching Jobs",
+        "action:fetch_jobs"
+      );
+
       await sendSafeTelegramMessage(
         ctx,
-        "✅ Resume processed successfully. Your high-fidelity career profile is saved."
+        [
+          "✅ <b>Resume processed successfully!</b>",
+          "",
+          "Your high-fidelity career profile has been saved.",
+          "",
+          "👉 Type <code>/jobs</code> or tap the button below to view live job matches from top tech companies!",
+        ].join("\n"),
+        { reply_markup: jobKeyboard }
       );
 
       console.log(
@@ -159,6 +173,105 @@ export function registerResumeHandlers(bot: Bot): void {
           "⚠️ Something went wrong while processing your resume. Please try again."
         );
       }
+    }
+  });
+
+  // /jobs or /job command — fetches live ATS job postings matching the candidate's stored resume profile
+  bot.command(["jobs", "job"], async (ctx) => {
+    const from = ctx.from;
+    if (!from) return;
+
+    await ctx.replyWithChatAction("typing");
+
+    try {
+      const user = await getOrCreateUser(
+        BigInt(from.id),
+        from.first_name,
+        from.username
+      );
+
+      // Guard: check if user has uploaded a resume
+      if (!user.resumeJson) {
+        const uploadKeyboard = new InlineKeyboard().text(
+          "📄 Upload Resume",
+          "action:upload_resume"
+        );
+
+        await sendSafeTelegramMessage(
+          ctx,
+          [
+            "<b>💼 Job Matcher — No Resume Found</b>",
+            "",
+            "You haven't uploaded a resume yet!",
+            "",
+            "To get personalized, live job matches from top tech companies (Stripe, OpenAI, Vercel, Notion, etc.):",
+            "",
+            "👉 Please upload your resume as a <b>PDF file</b> using <code>/resume</code> or tap the button below.",
+          ].join("\n"),
+          { reply_markup: uploadKeyboard }
+        );
+        return;
+      }
+
+      // Candidate has a stored resume profile! Fetch matching live jobs
+      const result = await matchJobs(
+        user.id,
+        user.resumeJson as Record<string, unknown>
+      );
+
+      await sendSafeTelegramMessage(ctx, result.formatted_html);
+    } catch (err) {
+      if (isAiServiceError(err)) {
+        console.error(`❌ [Jobs] AI service error: ${err.code} — ${err.message}`);
+        await sendSafeTelegramMessage(
+          ctx,
+          "⚠️ The job matching engine is temporarily updating. Please ensure the Python service is running (`npm run dev:ai`) and try /jobs again."
+        );
+      } else {
+        console.error("❌ [Jobs] Processing error:", err);
+        await sendSafeTelegramMessage(
+          ctx,
+          "⚠️ Something went wrong while fetching job postings. Please try again."
+        );
+      }
+    }
+  });
+
+  // Callback query for "💼 View Matching Jobs" button
+  bot.callbackQuery("action:fetch_jobs", async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Fetching live job matches..." });
+    const from = ctx.from;
+    if (!from) return;
+
+    await ctx.replyWithChatAction("typing");
+
+    try {
+      const user = await getOrCreateUser(
+        BigInt(from.id),
+        from.first_name,
+        from.username
+      );
+
+      if (!user.resumeJson) {
+        await sendSafeTelegramMessage(
+          ctx,
+          "⚠️ Please upload your resume using <code>/resume</code> first!"
+        );
+        return;
+      }
+
+      const result = await matchJobs(
+        user.id,
+        user.resumeJson as Record<string, unknown>
+      );
+
+      await sendSafeTelegramMessage(ctx, result.formatted_html);
+    } catch (err) {
+      console.error("❌ Action fetch jobs error:", err);
+      await sendSafeTelegramMessage(
+        ctx,
+        "⚠️ Could not fetch job matches right now. Please ensure the Python AI service is running and try <code>/jobs</code>."
+      );
     }
   });
 

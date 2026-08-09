@@ -165,6 +165,37 @@ export async function parseResume(
   return data;
 }
 
+/** Response from POST /api/v1/jobs/match. */
+export interface JobMatchResponse {
+  formatted_html: string;
+  total_found: number;
+  matched_count: number;
+  jobs: Array<Record<string, unknown>>;
+}
+
+/**
+ * Fetch live jobs matched against candidate's stored resume profile.
+ *
+ * @param userId Internal user ID
+ * @param resumeProfile Resume profile stored in Neon DB (user.resumeJson)
+ * @param companySlugs Optional list of company slugs
+ */
+export async function matchJobs(
+  userId: string,
+  resumeProfile: Record<string, unknown>,
+  companySlugs?: string[]
+): Promise<JobMatchResponse> {
+  const { data } = await aiClient.post<JobMatchResponse>(
+    "/api/v1/jobs/match",
+    {
+      user_id: userId,
+      resume_profile: resumeProfile,
+      company_slugs: companySlugs,
+    }
+  );
+  return data;
+}
+
 /** Type guard: check if an error is a normalized AiServiceError. */
 export function isAiServiceError(err: unknown): err is AiServiceError {
   return (

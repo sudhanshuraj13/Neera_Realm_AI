@@ -32,6 +32,7 @@ load_dotenv()  # Fallback standard search
 
 from app.agents import run_orchestration  # noqa: E402
 from app.agents.resume_agent import parse_resume  # noqa: E402
+from app.agents.job_agent import match_jobs_for_resume  # noqa: E402
 from app.schemas import OrchestrateRequest, OrchestrateResponse  # noqa: E402
 from app.schemas.resume import ResumeParseRequest, ResumeParseResponse  # noqa: E402
 
@@ -202,6 +203,53 @@ async def resume_parse(request: ResumeParseRequest):
                 "message": str(e),
             },
         )
+
+
+@app.post("/api/v1/jobs/match")
+async def jobs_match(payload: dict):
+    """
+    Job matching endpoint.
+
+    Accepts: { "user_id": str, "resume_profile": dict, "company_slugs": optional list[str] }
+    Fetches live ATS job listings and matches them against candidate's profile.
+    """
+    start_time = time.perf_counter()
+
+    user_id = payload.get("user_id", "unknown")
+    resume_profile = payload.get("resume_profile", {})
+    company_slugs = payload.get("company_slugs")
+
+    logger.info(
+        "💼 Job match request — user_id=%s, primary_role='%s'",
+        user_id,
+        resume_profile.get("primary_role", "Unknown"),
+    )
+
+    try:
+        match_result = await match_jobs_for_resume(resume_profile, company_slugs)
+
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(
+            "✅ Job matching complete — total=%d, matched=%d, elapsed=%.0fms",
+            match_result.get("total_found", 0),
+            match_result.get("matched_count", 0),
+            elapsed_ms,
+        )
+
+        return match_result
+
+    except Exception as e:
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.error("❌ Job matching failed after %.0fms: %s", elapsed_ms, e)
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Job matching failed",
+                "message": str(e),
+            },
+        )
+
 
 # ---------------------------------------------------------------------------
 # Standalone runner (python main.py)
