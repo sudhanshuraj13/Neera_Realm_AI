@@ -197,3 +197,49 @@ async def match_jobs_for_resume(
         "formatted_html": "\n".join(html_lines),
         "jobs": top_matches,
     }
+
+
+async def run_job_agent(prompt: str, context: Any) -> Any:
+    """
+    Standard Sub-Agent function for Job / Career Agent.
+
+    Args:
+        prompt: Raw user message text
+        context: UserContext model or dictionary
+
+    Returns:
+        AgentResult with formatted Telegram HTML job response
+    """
+    from app.agents.base import AgentResult
+
+    user_prefs = {}
+    if hasattr(context, "user_preferences"):
+        user_prefs = context.user_preferences
+    elif isinstance(context, dict):
+        user_prefs = context.get("user_preferences", {})
+
+    resume_profile = user_prefs.get("resumeJson") or user_prefs.get("resume_profile") or {}
+
+    if not resume_profile:
+        content = (
+            "<b>💼 Tech & Career Job Matcher</b>\n\n"
+            "You haven't uploaded a resume yet!\n\n"
+            "To get personalized live job postings matched to your target role & skills:\n"
+            "👉 Send your resume PDF using <code>/resume</code> or tap <b>📄 Upload Resume</b>!"
+        )
+        return AgentResult(
+            content=content,
+            agent_name="job",
+            metadata={"status": "no_resume"},
+        )
+
+    match_res = await match_jobs_for_resume(resume_profile)
+    return AgentResult(
+        content=match_res.get("formatted_html", ""),
+        agent_name="job",
+        metadata={
+            "total_found": match_res.get("total_found", 0),
+            "matched_count": match_res.get("matched_count", 0),
+        },
+    )
+

@@ -87,6 +87,9 @@ export function registerMessageHandlers(bot: Bot): void {
           preferences["industries"] = user.preference.industries;
           preferences["briefingTime"] = user.preference.briefingTime;
         }
+        if (user.resumeJson) {
+          preferences["resumeJson"] = user.resumeJson;
+        }
 
         const pythonResult = await routeViaPythonService(
           user.id,
