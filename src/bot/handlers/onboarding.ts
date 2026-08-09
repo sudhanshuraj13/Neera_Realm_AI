@@ -1,4 +1,4 @@
-import type { Bot, CallbackQueryContext, Context } from "grammy";
+import type { Bot } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { getOrCreateUser, updateUserPreferences } from "../../db/userRepository.js";
 import { sendSafeTelegramMessage } from "../../utils/telegram.js";
@@ -48,11 +48,95 @@ export function registerOnboardingHandlers(bot: Bot): void {
   // --- Callback query handlers ---
 
   bot.callbackQuery(CALLBACK.INDUSTRY_FINANCE, async (ctx) => {
-    await handleIndustrySelection(ctx, ["Finance"], "📈 Finance & Markets");
+    const from = ctx.from;
+    if (!from) return;
+
+    const user = await getOrCreateUser(
+      BigInt(from.id),
+      from.first_name,
+      from.username
+    );
+
+    await updateUserPreferences(user.id, {
+      industries: ["Finance"],
+      watchlist: ["AAPL", "NVDA", "TSLA"],
+      onboardingDone: true,
+    });
+
+    const stockKeyboard = new InlineKeyboard()
+      .text("🍎 AAPL", "action:query:AAPL")
+      .text("🟢 NVDA", "action:query:NVDA")
+      .row()
+      .text("⚡ TSLA", "action:query:TSLA")
+      .text("🛍️ BABA", "action:query:BABA");
+
+    await ctx.editMessageText(
+      [
+        "<b>📈 Finance & Markets Suite Ready!</b>",
+        "",
+        "Preferences updated for <b>Finance & Markets</b>.",
+        "",
+        "• <b>Industries:</b> Finance",
+        "• <b>Watchlist:</b> AAPL, NVDA, TSLA",
+        "• <b>Briefing Time:</b> 08:00 UTC",
+        "",
+        "👇 <b>Tap a stock below for an instant briefing, or type any ticker:</b>",
+      ].join("\n"),
+      {
+        parse_mode: "HTML",
+        reply_markup: stockKeyboard,
+      }
+    );
+
+    await ctx.answerCallbackQuery({ text: "Selected: 📈 Finance & Markets" });
   });
 
   bot.callbackQuery(CALLBACK.INDUSTRY_TECH, async (ctx) => {
-    await handleIndustrySelection(ctx, ["Tech", "Startups"], "🚀 Tech & Startups");
+    const from = ctx.from;
+    if (!from) return;
+
+    const user = await getOrCreateUser(
+      BigInt(from.id),
+      from.first_name,
+      from.username
+    );
+
+    await updateUserPreferences(user.id, {
+      industries: ["Tech", "Startups"],
+      watchlist: ["NVDA", "TSLA", "MSFT"],
+      onboardingDone: true,
+    });
+
+    const techKeyboard = new InlineKeyboard()
+      .text("📄 Upload Resume", "action:upload_resume")
+      .row()
+      .text("🟢 NVDA", "action:query:NVDA")
+      .text("⚡ TSLA", "action:query:TSLA")
+      .row()
+      .text("💻 Tech Career Intelligence", "action:career_prep");
+
+    await ctx.editMessageText(
+      [
+        "<b>🚀 Tech & Startups Hub Ready!</b>",
+        "",
+        "Welcome to your Tech & Career Intelligence Suite.",
+        "",
+        "• <b>Focus:</b> Tech, Startups & Career Intelligence",
+        "• <b>Watchlist:</b> NVDA, TSLA, MSFT",
+        "• <b>Briefing Time:</b> 08:00 UTC",
+        "",
+        "💼 <b>Career Intelligence & ATS Matching:</b>",
+        "Upload your resume to extract skills, experience & target roles for automated job matching.",
+        "",
+        "👇 <b>Tap '📄 Upload Resume' below to upload your resume PDF!</b>",
+      ].join("\n"),
+      {
+        parse_mode: "HTML",
+        reply_markup: techKeyboard,
+      }
+    );
+
+    await ctx.answerCallbackQuery({ text: "Selected: 🚀 Tech & Startups" });
   });
 
   bot.callbackQuery(CALLBACK.SKIP, async (ctx) => {
@@ -67,7 +151,9 @@ export function registerOnboardingHandlers(bot: Bot): void {
 
     await updateUserPreferences(user.id, { onboardingDone: true });
 
-    const stockKeyboard = new InlineKeyboard()
+    const defaultKeyboard = new InlineKeyboard()
+      .text("📄 Upload Resume", "action:upload_resume")
+      .row()
       .text("🍎 AAPL", "action:query:AAPL")
       .text("🟢 NVDA", "action:query:NVDA")
       .row()
@@ -85,11 +171,11 @@ export function registerOnboardingHandlers(bot: Bot): void {
         "• <b>Watchlist:</b> AAPL, NVDA, TSLA",
         "• <b>Briefing Time:</b> 08:00 UTC",
         "",
-        "👇 <b>Tap a stock below for an instant briefing, or type any ticker:</b>",
+        "👇 <b>Tap a stock for a briefing, or tap '📄 Upload Resume' to upload your PDF:</b>",
       ].join("\n"),
       {
         parse_mode: "HTML",
-        reply_markup: stockKeyboard,
+        reply_markup: defaultKeyboard,
       }
     );
 
@@ -97,49 +183,3 @@ export function registerOnboardingHandlers(bot: Bot): void {
   });
 }
 
-/** Shared handler for industry selection callbacks. */
-async function handleIndustrySelection(
-  ctx: CallbackQueryContext<Context>,
-  industries: string[],
-  label: string
-): Promise<void> {
-  const from = ctx.from;
-  if (!from) return;
-
-  const user = await getOrCreateUser(
-    BigInt(from.id),
-    from.first_name,
-    from.username
-  );
-
-  await updateUserPreferences(user.id, {
-    industries,
-    onboardingDone: true,
-  });
-
-  const stockKeyboard = new InlineKeyboard()
-    .text("🍎 AAPL", "action:query:AAPL")
-    .text("🟢 NVDA", "action:query:NVDA")
-    .row()
-    .text("⚡ TSLA", "action:query:TSLA")
-    .text("🛍️ BABA", "action:query:BABA");
-
-  await ctx.editMessageText(
-    [
-      `<b>✅ Preferences updated!</b>`,
-      "",
-      `You selected: <b>${label}</b>`,
-      "",
-      "Your default watchlist is set to: <b>AAPL, NVDA, TSLA</b>",
-      "Briefing time: <b>08:00 UTC</b>",
-      "",
-      "👇 <b>Tap a stock below for an instant briefing, or type any ticker:</b>",
-    ].join("\n"),
-    {
-      parse_mode: "HTML",
-      reply_markup: stockKeyboard,
-    }
-  );
-
-  await ctx.answerCallbackQuery({ text: `Selected: ${label}` });
-}

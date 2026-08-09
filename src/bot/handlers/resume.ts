@@ -161,4 +161,39 @@ export function registerResumeHandlers(bot: Bot): void {
       }
     }
   });
+
+  // Inline keyboard button callback: "📄 Upload Resume"
+  bot.callbackQuery("action:upload_resume", async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Attach your PDF resume below" });
+    await sendSafeTelegramMessage(
+      ctx,
+      [
+        "<b>📄 Resume Upload Instructions</b>",
+        "",
+        "Please send your resume as a <b>PDF file</b> directly in this chat.",
+        "",
+        "1️⃣ Click the 📎 <b>Attachment icon</b> (or drag & drop your PDF file).",
+        "2️⃣ Select your <b>Resume PDF</b>.",
+        "3️⃣ Hit send!",
+        "",
+        "<i>Our AI engine will instantly extract your skills, experience, projects, and match target job roles for you.</i>",
+      ].join("\n")
+    );
+  });
+
+  // Inline keyboard button callback: "💻 Tech Career Intelligence"
+  bot.callbackQuery("action:career_prep", async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Tech Career & ATS Matching" });
+    await sendSafeTelegramMessage(
+      ctx,
+      [
+        "<b>💻 Tech Career Intelligence & ATS Matching</b>",
+        "",
+        "Neera AI syncs directly with public ATS endpoints (Greenhouse, Lever, Ashby) to aggregate live job listings from tech giants & high-growth startups (Stripe, OpenAI, Vercel, Notion, etc.).",
+        "",
+        "To get personalized job recommendations:",
+        "👉 Click <b>📄 Upload Resume</b> or send your resume PDF to start!",
+      ].join("\n")
+    );
+  });
 }
