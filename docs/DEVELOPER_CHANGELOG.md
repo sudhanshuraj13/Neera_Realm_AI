@@ -1,17 +1,26 @@
 # Developer Changelog — Neera Realm AI
 
-This log is structured for vibe coding. Each update is documented in three clean parts:
-1. **The Vibe (What changed & Why)**: Plain English summary of the change.
-2. **The Prompt (How to talk to the AI about it)**: The instruction used to generate or modify the feature.
-3. **The Snippet (The Code)**: Concise code snippet showing the core implementation.
+This log is structured for vibe coding. Each update is documented using four standard sections:
+1. **The Vibe (What & Why):** Simple real-world analogy for non-technical stakeholders + precise technical explanation for developers.
+2. **The Prompt (How to talk to the AI):** The exact instruction or context used to modify the code.
+3. **The Blast Radius (Side Effects):** Explicit tracking of Environment Variables, NPM/Pip Packages, and Database Schema updates.
+4. **The Snippet (Core Code):** Clean code snippet showcasing the core change.
+
+---
 
 ## [2026-08-11] — Refactor: Native Async LangGraph Nodes & Non-Blocking Orchestration
 
-### 0. Native Async LangGraph Node Functions
-- **The Vibe (What changed & Why)**: Refactored all nodes in `supervisor.py` (`classify_intent_node`, `run_jobs_node`, `run_resume_node`, `run_financial_node`, `run_calendar_node`, `supervise_node`, `run_synthesis_node`) to native `async def` coroutines. Removed all thread-pool runners and event loop hacks, using `await run_job_agent(...)`, `await llm.ainvoke(...)`, and `await _compiled_graph.ainvoke(initial_state)` for 100% non-blocking, high-performance asyncio execution inside FastAPI.
-- **The Prompt (How to talk to the AI about it)**:
-  > Refactor all LangGraph nodes in supervisor.py to native async def functions. Remove thread pools or run_until_complete hacks. Use await natively for sub-agent execution and await _compiled_graph.ainvoke(initial_state).
-- **The Snippet (The Code)**:
+### 1. Native Async LangGraph Node Functions
+* **The Vibe (What & Why):**
+  * *Analogy:* Think of this like upgrading a receptionist's phone system so they can answer multiple calls simultaneously using call-waiting instead of putting customers on hold or creating separate phone lines.
+  * *Technical:* Swapped out thread-pool runners (`ThreadPoolExecutor`) for native `async/await` coroutines (`async def`) across all LangGraph nodes (`classify_intent_node`, `run_jobs_node`, `run_resume_node`, `run_financial_node`, `run_calendar_node`, `supervise_node`, `run_synthesis_node`). Awaits graph execution via `await _compiled_graph.ainvoke(initial_state)` for 100% non-blocking asyncio execution inside FastAPI.
+* **The Prompt (How to talk to the AI):**
+  * "LangGraph fully supports asynchronous nodes natively. You do not need thread pools or run_until_complete hacks. Your nodes in supervisor.py should simply be defined as async functions, and you should use the standard await keyword."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* None.
+  * *DB Changes:* None.
+* **The Snippet (Core Code):**
   ```python
   # Native Async LangGraph Node Functions
   async def run_jobs_node(state: OrchestratorState) -> dict[str, Any]:
@@ -31,18 +40,26 @@ This log is structured for vibe coding. Each update is documented in three clean
       return OrchestrateResponse(**final_state["final_response"])
   ```
 
-### 1. Cross-Deployment Chat History Windowing
-- **The Vibe (What changed & Why)**: Updated `UserContext` and `routeViaPythonService` to pass `chat_history` (retrieved from Neon PostgreSQL via `getRecentMessages`) to the Python FastAPI microservice. The AI agent now maintains conversation memory across turns and container redeployments on Render.
-- **The Prompt (How to talk to the AI about it)**:
-  > Add chat_history to UserContext in Python FastAPI and pass recent history from getRecentMessages in message.ts so conversation memory persists across Render redeployments.
-- **The Snippet (The Code)**:
+---
+
+### 2. Cross-Deployment Conversation Memory Windowing
+* **The Vibe (What & Why):**
+  * *Analogy:* Like giving the AI assistant a persistent notebook stored in the cloud so that even if the server restarts or deploys new code, it remembers what you were talking about 2 minutes ago.
+  * *Technical:* Extended `UserContext` with `chat_history` and updated Node.js `routeViaPythonService` to fetch recent messages from Neon PostgreSQL via `getRecentMessages(userId, 6)`. Eliminates conversation memory loss across Render container redeployments.
+* **The Prompt (How to talk to the AI):**
+  * "Add chat_history to UserContext in Python FastAPI and pass recent history from getRecentMessages in message.ts so conversation memory persists across Render redeployments."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* None.
+  * *DB Changes:* None (uses existing `messages` table in Neon PostgreSQL).
+* **The Snippet (Core Code):**
   ```typescript
   // Fetch calendar events and recent chat history window from Neon PostgreSQL
   const calendarEvents = await CalendarService.getUpcomingEvents(telegramId);
   const history = await getRecentMessages(userId, 6);
 
   const context: OrchestrateContext = {
-    calendar_events: calendarEvents.map(...),
+    calendar_events: calendarEvents.map((e) => ({ ... })),
     user_preferences: userPreferences,
     chat_history: history.map((h) => ({ role: h.role, content: h.content })),
   };
@@ -52,11 +69,17 @@ This log is structured for vibe coding. Each update is documented in three clean
 
 ## [2026-08-11] — Security & Repository Hardening (.gitignore Audit)
 
-### 0. Repository .gitignore Security Hardening
-- **The Vibe (What changed & Why)**: Updated root `.gitignore` with comprehensive ignore rules covering environment files, API keys, tokens, Python virtual environments, `__pycache__`, local databases, runtime PDF uploads, logs, and IDE configs to guarantee zero secrets or temporary files ever reach GitHub. Verified git tracking history to confirm no sensitive files were ever pushed.
-- **The Prompt (How to talk to the AI about it)**:
-  > Add necessary things in .gitignore which we should not push on GitHub. Review all docs and codebase and add those files, docs, and folders to .gitignore. If anything sensitive was pushed, retrieve or remove it from GitHub.
-- **The Snippet (The Code)**:
+### 3. Repository .gitignore Security Hardening
+* **The Vibe (What & Why):**
+  * *Analogy:* Installing a security vault door on your house so private personal documents and house keys never accidentally end up on a public billboard.
+  * *Technical:* Updated root `.gitignore` with strict rules for `.env` files, API keys, tokens, Python virtual environments, `__pycache__`, local databases, runtime PDF uploads, logs, and IDE configs. Verified git tracking history to confirm zero secrets exist on GitHub.
+* **The Prompt (How to talk to the AI):**
+  * "Add necessary things in .gitignore which we should not push on GitHub. Review all docs and codebase and add those files, docs, and folders to .gitignore. If anything sensitive was pushed, retrieve or remove it from GitHub."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* None.
+  * *DB Changes:* None.
+* **The Snippet (Core Code):**
   ```gitignore
   # Environment & Secrets (NEVER COMMIT API KEYS OR CREDENTIALS)
   .env
@@ -84,11 +107,17 @@ This log is structured for vibe coding. Each update is documented in three clean
 
 ## [2026-08-11] — Phase 2.5: Deterministic UI & LangGraph Clarification (HITL)
 
-### 1. Database Schema Explicit Fields
-- **The Vibe (What changed & Why)**: Added explicit `experienceLevel`, `targetRoles`, and `locationPreference` columns to the Prisma `User` model in Neon PostgreSQL so user preferences are stored cleanly in database columns instead of hidden inside raw JSON.
-- **The Prompt (How to talk to the AI about it)**:
-  > Add explicit fields to the User model to decouple them from raw resumeJson: experienceLevel (String, optional), targetRoles (String[], default: []), locationPreference (String, optional). Run npx prisma db push.
-- **The Snippet (The Code)**:
+### 4. Database Schema Explicit Fields
+* **The Vibe (What & Why):**
+  * *Analogy:* Moving your keys, wallet, and passport into dedicated labeled desk drawers instead of dumping everything into one giant unlabeled box.
+  * *Technical:* Added explicit `experienceLevel`, `targetRoles`, and `locationPreference` columns to the Prisma `User` model in Neon PostgreSQL, decoupling user career preferences from raw unparsed `resumeJson`.
+* **The Prompt (How to talk to the AI):**
+  * "Add explicit fields to the User model to decouple them from raw resumeJson: experienceLevel (String, optional), targetRoles (String[], default: []), locationPreference (String, optional). Run npx prisma db push."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* None.
+  * *DB Changes:* Added `experienceLevel`, `targetRoles`, `locationPreference` columns to `users` table in Neon PostgreSQL.
+* **The Snippet (Core Code):**
   ```prisma
   model User {
     id                 String   @id @default(uuid())
@@ -103,11 +132,17 @@ This log is structured for vibe coding. Each update is documented in three clean
 
 ---
 
-### 2. Interactive Deterministic Onboarding Keyboards
-- **The Vibe (What changed & Why)**: Replaced brittle text-guessing of fresher/senior experience with an interactive 2-step Telegram Inline Keyboard right after uploading a resume PDF (`[ 🎓 Fresher (0-1 yrs) ]`, `[ 💻 Junior (1-3 yrs) ]`, `[ 🚀 Senior (3+ yrs) ]`).
-- **The Prompt (How to talk to the AI about it)**:
-  > Refactor /resume upload flow. Parse PDF raw skills/projects via Python and save to resumeJson. IMMEDIATELY follow up with an interactive Telegram Inline Keyboard asking "What is your exact experience level?" with buttons [Fresher], [Junior], [Senior]. Update user.experienceLevel in DB on button click.
-- **The Snippet (The Code)**:
+### 5. Interactive Deterministic Onboarding Keyboards
+* **The Vibe (What & Why):**
+  * *Analogy:* Giving visitors a multiple-choice button card on arrival instead of trying to guess their preference by analyzing handwriting on a piece of paper.
+  * *Technical:* Replaced brittle LLM regex string-guessing with an interactive Telegram Inline Keyboard right after uploading a resume PDF (`[ 🎓 Fresher (0-1 yrs) ]`, `[ 💻 Junior (1-3 yrs) ]`, `[ 🚀 Senior (3+ yrs) ]`). Saves selection directly into database.
+* **The Prompt (How to talk to the AI):**
+  * "Refactor /resume upload flow. Parse PDF raw skills/projects via Python and save to resumeJson. IMMEDIATELY follow up with an interactive Telegram Inline Keyboard asking 'What is your exact experience level?' with buttons [Fresher], [Junior], [Senior]. Update user.experienceLevel in DB on button click."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* None.
+  * *DB Changes:* Updates `User.experienceLevel` column on callback query.
+* **The Snippet (Core Code):**
   ```typescript
   // Telegram Inline Keyboard for Experience Setup
   const expKeyboard = new InlineKeyboard()
@@ -127,14 +162,20 @@ This log is structured for vibe coding. Each update is documented in three clean
 
 ---
 
-### 3. LangGraph Human-In-The-Loop (HITL) Clarification Node
-- **The Vibe (What changed & Why)**: Updated `supervisor.py` so if a user asks for jobs but `locationPreference` is missing from their DB profile, the Supervisor halts execution and asks a Human-In-The-Loop clarification question: *"Are you looking for Remote roles, or a specific city like Bangalore?"*
-- **The Prompt (How to talk to the AI about it)**:
-  > Update AgentState to include clarification_question: str | None. In supervise_node, if user asks for jobs but location_preference is missing or query is vague, set state: {"clarification_question": "..."}. In synthesize_node, if clarification_question exists, return reply_text with intent_detected = "clarification".
-- **The Snippet (The Code)**:
+### 6. LangGraph Human-In-The-Loop (HITL) Clarification Node
+* **The Vibe (What & Why):**
+  * *Analogy:* Like a smart GPS asking *"Did you mean Springfield, Illinois or Springfield, Massachusetts?"* before starting a 5-hour drive instead of taking you to the wrong city.
+  * *Technical:* Added `clarification_question` to `OrchestratorState` and implemented parameter auditing in `supervise_node`. If a user queries jobs without a location preference set in DB, the Supervisor returns `intent_detected = "clarification"` and asks the user directly.
+* **The Prompt (How to talk to the AI):**
+  * "Update AgentState to include clarification_question: str | None. In supervise_node, if user asks for jobs but location_preference is missing or query is vague, set state: {'clarification_question': '...'}. In synthesize_node, if clarification_question exists, return reply_text with intent_detected = 'clarification'."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* None.
+  * *DB Changes:* Auto-persists location response to `User.locationPreference`.
+* **The Snippet (Core Code):**
   ```python
   # Supervisor HITL Audit Node
-  def supervise_node(state: OrchestratorState) -> dict[str, Any]:
+  async def supervise_node(state: OrchestratorState) -> dict[str, Any]:
       request = OrchestrateRequest(**state["request"])
       user_prefs = request.context.user_preferences or {}
       location_pref = user_prefs.get("locationPreference")
@@ -150,11 +191,17 @@ This log is structured for vibe coding. Each update is documented in three clean
 
 ## [2026-08-10] — Phase 2: LangGraph State Machine & State Accumulators
 
-### 4. LangGraph State Accumulators (`operator.add`)
-- **The Vibe (What changed & Why)**: Prevented sequential sub-agent calls in mixed queries (`jobs` -> `financial` -> `calendar`) from overwriting previous agent outputs by annotating list fields with `operator.add` reducers.
-- **The Prompt (How to talk to the AI about it)**:
-  > Ensure your LangGraph AgentState uses Annotated[list[dict], operator.add] for node outputs so mixed_chain doesn't overwrite jobs_node data when financial_node runs.
-- **The Snippet (The Code)**:
+### 7. LangGraph State Accumulators (`operator.add`)
+* **The Vibe (What & Why):**
+  * *Analogy:* Using an expanding notepad where each worker appends their section instead of erasing the previous worker's notes on a shared whiteboard.
+  * *Technical:* Prevented sequential sub-agent calls in mixed queries (`jobs` -> `financial` -> `calendar`) from overwriting previous agent outputs by annotating list fields with `operator.add` reducers in `OrchestratorState`.
+* **The Prompt (How to talk to the AI):**
+  * "Ensure your LangGraph AgentState uses Annotated[list[dict], operator.add] for node outputs so mixed_chain doesn't overwrite jobs_node data when financial_node runs."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* None.
+  * *DB Changes:* None.
+* **The Snippet (Core Code):**
   ```python
   import operator
   from typing import Annotated, TypedDict
@@ -169,11 +216,17 @@ This log is structured for vibe coding. Each update is documented in three clean
 
 ---
 
-### 5. Render Cold Start Timeout Extension
-- **The Vibe (What changed & Why)**: Increased Node.js HTTP client timeout for the Python service from 15 seconds to 60 seconds to support Render free-tier web service cold starts (25-45 seconds wake-up time).
-- **The Prompt (How to talk to the AI about it)**:
-  > Increase Axios client timeout to 60s in aiService.ts to handle Render cold starts and live ATS job scanning.
-- **The Snippet (The Code)**:
+### 8. Render Cold Start Timeout Extension
+* **The Vibe (What & Why):**
+  * *Analogy:* Extending the doorbell ringing timer from 15 seconds to 60 seconds so guests have enough time to walk to the front door without you walking away.
+  * *Technical:* Increased Node.js HTTP client timeout for the Python microservice from 15s to 60s in `aiService.ts` to accommodate Render free-tier web service cold starts (25–45 seconds wake-up time).
+* **The Prompt (How to talk to the AI):**
+  * "Increase Axios client timeout to 60s in aiService.ts to handle Render cold starts and live ATS job scanning."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* None.
+  * *DB Changes:* None.
+* **The Snippet (Core Code):**
   ```typescript
   const aiClient: AxiosInstance = axios.create({
     baseURL: process.env["AI_SERVICE_URL"] || "http://localhost:8000",
