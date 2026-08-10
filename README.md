@@ -1,76 +1,58 @@
-# 🧭 Neera AI - Financial & Productivity Telegram Assistant
+# 🚀 Neera Realm AI — Career & Financial Intelligence SaaS
 
-## 1. Overview
-Neera AI is an autonomous, production-ready Telegram assistant engineered with TypeScript and Node.js that delivers real-time financial market intelligence, portfolio tracking, and executive productivity tooling. The system integrates Yahoo Finance for live market telemetry, synthesizes Google Calendar schedules for pre-meeting stock prep, and triggers personalized morning briefings via a cron-driven scheduler (`node-cron`). All AI-generated briefings and conversational insights are validated and formatted under strict Telegram HTML parsing constraints to ensure seamless, error-free UI delivery.
+**Neera Realm AI** is an AI-powered Career Intelligence SaaS platform and Telegram assistant. Built on a hybrid architecture, it pairs a Node.js Telegram Bot Gateway (grammY, Prisma, Neon PostgreSQL) with a Python FastAPI AI Microservice (LangGraph, Gemini 2.5).
 
-Live Bot: @Atlas_newer_Bot
-Demo Video:// [Link to Video Walkthrough]
+---
 
-## 2. Core Features
-*   **Proactive Cron-Driven Briefings**: Automated background worker (`node-cron`) checks user preferences every minute and dispatches personalized morning portfolio digests and macro insights at the user's scheduled UTC time.
-*   **Pre-Meeting Calendar Synthesis**: Connects with Google Calendar API (with mock schedule fallback) to map daily meeting agendas against relevant corporate tickers and deliver actionable pre-meeting intelligence (`/agenda`).
-*   **Conversation Memory Windowing**: Retrieves and maintains a chronological rolling context window (last 6 messages) from Neon PostgreSQL to support natural multi-turn financial discussions and entity recall without token bloat.
-*   **Strict Zod Schema Enforcement**: Validates all structured LLM responses against rigid Zod schemas, guaranteeing reliable JSON payloads for intent routing, financial summaries, and agenda digests.
-*   **Multi-Provider AI Resilience with Live Fallback**: Cascades across Groq (`llama-3.3-70b-versatile`), Google Gemini (`gemini-2.0-flash`), and OpenAI (`gpt-4o-mini`) with zero-AI mathematical fallbacks for 99.99% uptime.
+## 📚 Complete Project Documentation (`docs/`)
 
-## 3. Tech Stack & Architecture
-*   **Language**: TypeScript (Node.js v20+, ES Modules)
-*   **Bot Framework**: grammY (`^1.35.0`)
-*   **Database & ORM**: PostgreSQL (Neon Serverless) with Prisma ORM (`^6.9.0`)
-*   **AI Engine**: Vercel AI SDK (`ai`), `@ai-sdk/google`, `@ai-sdk/openai`, and Groq LPU inference with Zod schema validation
-*   **System Flow**: Telegram Long Polling -> grammY Router -> Intent Classifier / Fast-Path Regex -> Yahoo Finance / Calendar Service -> Multi-Provider AI Engine (Groq/Gemini/OpenAI) -> HTML Formatter & Error Boundary -> Telegram UI
+All official project documentation is maintained in the `docs/` directory:
 
-## 4. Local Setup & Installation
+### 1. Product & Business Documents
+- 🎯 **[Product Vision Document](docs/PRODUCT_VISION.md)** — Core goals, target users, and SaaS pillars.
+- 📋 **[Requirements Document](docs/REQUIREMENTS.md)** — Functional and non-functional specifications.
+- 🗺️ **[Project Roadmap](docs/ROADMAP.md)** — Completed phases and future feature timeline.
 
-### Prerequisites
-*   Node.js v20+
-*   PostgreSQL database (or Neon Serverless Postgres instance)
-*   Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
-*   At least one AI API key (Groq, Google Gemini, or OpenAI)
+### 2. Technical & Design Documents
+- 🏗️ **[System Architecture Document](docs/ARCHITECTURE.md)** — High-level architecture, microservice decoupling, and LangGraph state machine flow.
+- 🔌 **[API Documentation](docs/API_DOCUMENTATION.md)** — REST API specifications for `/api/v1/orchestrate`, `/api/v1/resume/parse`, `/api/v1/jobs/match`.
+- 🗄️ **[Database Schema Document](docs/DATABASE_SCHEMA.md)** — Neon PostgreSQL tables (`users`, `user_preferences`, `messages`).
 
-### Installation Steps
+### 3. User & Support Documents
+- 📖 **[User Manual](docs/USER_MANUAL.md)** — Step-by-step guide for `/resume`, `/jobs`, `/target_companies`, `/briefing`, `/agenda`.
+- ⚙️ **[Installation & Deployment Guide](docs/INSTALLATION_GUIDE.md)** — Local development setup and Render deployment guide.
+- ❓ **[Frequently Asked Questions (FAQs)](docs/FAQS.md)** — Render cold-starts, troubleshooting, and parameter clarification.
+
+### 4. Developer & Testing Documents
+- 🧪 **[Testing Plan](docs/TESTING_PLAN.md)** — Automated typechecking and end-to-end integration test scenarios.
+- 🚀 **[Release Notes](docs/RELEASE_NOTES.md)** — Major release highlights and features.
+- 📝 **[Developer Changelog (Vibe Coding Log)](docs/DEVELOPER_CHANGELOG.md)** — 3-part changelog (**Vibe / Prompt / Snippet**) tracking every codebase change.
+
+---
+
+## ⚡ Quickstart Commands
+
+### Node.js Telegram Bot Gateway
 ```bash
-# 1. Clone the repository
-git clone <repository-url>
-cd atlas_ai
-
-# 2. Install dependencies
+# Install dependencies
 npm install
 
-# 3. Set up environment variables
-cp .env.example .env
+# Push schema to Neon PostgreSQL
+npx prisma db push
 
-# 4. Generate Prisma Client & push schema to database
-npm run db:generate
-npm run db:push
-
-# 5. Run the bot in development mode (hot reloading)
-npm run dev
-
-# 6. Typecheck and build for production
+# Typecheck TypeScript
 npm run typecheck
-npm run build
-npm start
+
+# Start development bot
+npm run dev
 ```
 
-### Environment Variables
-Configure the following keys in your `.env` file:
+### Python AI Microservice (`ai_service/`)
+```bash
+cd ai_service
+pip install -r requirements.txt
 
-| Variable | Required | Description |
-| :--- | :---: | :--- |
-| `TELEGRAM_BOT_TOKEN` | **Yes** | Telegram Bot API token generated by @BotFather |
-| `DATABASE_URL` | **Yes** | PostgreSQL connection string (e.g. Neon connection pooling URI) |
-| `GROQ_API_KEY` | Recommended | Groq Cloud API key for ultra-fast primary LPU inference |
-| `GROQ_MODEL` | No | Custom Groq model name (default: `llama-3.3-70b-versatile`) |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Optional | Google AI Studio API key for Gemini 2.0 Flash fallback |
-| `OPENAI_API_KEY` | Optional | OpenAI API key for GPT-4o-mini fallback |
-| `PORT` | No | Port for the HTTP health-check server (default: `3000`) |
-
-## 5. Usage & Commands
-*   `/start`: Initializes user onboarding, saves profile to PostgreSQL, and guides the user through industry, watchlist, and briefing time setup.
-*   `/briefing`: Fetches live market telemetry for the user's watchlist and generates an on-demand AI executive market intelligence briefing.
-*   `/agenda`: Pulls upcoming calendar meetings, correlates agenda topics with stock tickers, and synthesizes executive company prep.
-*   `/settings`: Displays and allows customization of tracking preferences, including watchlist tickers, industry focus, and daily briefing time.
-
-## 6. Deployment
-The repository includes a lightweight HTTP health-check server (`src/server.ts`) that listens on `process.env.PORT || 3000` and exposes `GET /health` and `GET /`. Cloud hosting platforms such as Render, Railway, and Fly.io require an active HTTP listener to satisfy port-binding health probes and prevent container idle termination. This architecture enables the bot to run continuously 24/7 via Telegram long polling while reliably executing background cron schedulers without requiring external webhooks or proxy services.
+# Start Python FastAPI AI microservice
+npm run dev:ai
+# (Runs: python main.py on port 8000)
+```
