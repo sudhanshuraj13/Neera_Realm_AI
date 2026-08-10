@@ -5,6 +5,36 @@ This log is structured for vibe coding. Each update is documented in three clean
 2. **The Prompt (How to talk to the AI about it)**: The instruction used to generate or modify the feature.
 3. **The Snippet (The Code)**: Concise code snippet showing the core implementation.
 
+## [2026-08-11] — Security & Repository Hardening (.gitignore Audit)
+
+### 0. Repository .gitignore Security Hardening
+- **The Vibe (What changed & Why)**: Updated root `.gitignore` with comprehensive ignore rules covering environment files, API keys, tokens, Python virtual environments, `__pycache__`, local databases, runtime PDF uploads, logs, and IDE configs to guarantee zero secrets or temporary files ever reach GitHub. Verified git tracking history to confirm no sensitive files were ever pushed.
+- **The Prompt (How to talk to the AI about it)**:
+  > Add necessary things in .gitignore which we should not push on GitHub. Review all docs and codebase and add those files, docs, and folders to .gitignore. If anything sensitive was pushed, retrieve or remove it from GitHub.
+- **The Snippet (The Code)**:
+  ```gitignore
+  # Environment & Secrets (NEVER COMMIT API KEYS OR CREDENTIALS)
+  .env
+  .env.*
+  ai_service/.env
+  *.pem
+  *.key
+  credentials.json
+  tokens.json
+
+  # Dependencies, Builds & Python Bytecode
+  node_modules/
+  dist/
+  __pycache__/
+  ai_service/venv/
+
+  # Local DB, Storage & User PDF Uploads
+  *.sqlite
+  *.db
+  uploads/
+  *.pdf
+  ```
+
 ---
 
 ## [2026-08-11] — Phase 2.5: Deterministic UI & LangGraph Clarification (HITL)
