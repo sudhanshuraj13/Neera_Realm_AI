@@ -224,10 +224,13 @@ async def match_jobs_for_resume(
         target_companies,
     )
 
-    # 1. Fetch live jobs dynamically (target companies + global startup job aggregators)
+    # 1. Fetch live jobs dynamically (target companies + global startup job aggregators filtered by candidate profile)
     all_jobs = await fetch_all_jobs(
         company_slugs=target_companies,
         include_global_startups=True,
+        primary_role=primary_role,
+        target_roles=target_roles,
+        skills=skills,
     )
 
     if not all_jobs:

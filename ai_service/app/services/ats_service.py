@@ -155,17 +155,76 @@ async def fetch_ashby_jobs(
         return []
 
 
+def build_role_keywords(
+    primary_role: str = "",
+    target_roles: list[str] | None = None,
+    skills: list[str] | None = None,
+) -> set[str]:
+    """
+    Build candidate-specific role search keywords.
+    Guarantees 'software engineer' and 'software developer' are common baseline roles for all users,
+    plus specific titles derived from candidate's primary role, target roles & extracted skills
+    (e.g., AI Engineer, Backend Engineer, Frontend Engineer, Data Engineer).
+    """
+    keywords: set[str] = {
+        "software engineer",
+        "software developer",
+        "fullstack",
+        "full stack",
+        "engineer",
+        "developer",
+    }
+
+    if primary_role:
+        clean = primary_role.strip().lower()
+        if clean:
+            keywords.add(clean)
+            for word in clean.split():
+                if len(word) > 2 and word not in {"fresher", "junior", "senior"}:
+                    keywords.add(word)
+
+    if target_roles:
+        for r in target_roles:
+            clean = r.strip().lower()
+            if clean:
+                keywords.add(clean)
+                for word in clean.split():
+                    if len(word) > 2 and word not in {"fresher", "junior", "senior"}:
+                        keywords.add(word)
+
+    if skills:
+        for skill in skills:
+            sk_lower = skill.strip().lower()
+            if any(term in sk_lower for term in ["ai", "ml", "artificial intelligence", "machine learning", "genai", "llm"]):
+                keywords.update({"ai", "ml", "ai engineer", "ai developer", "machine learning", "data scientist", "llm"})
+            if any(term in sk_lower for term in ["backend", "api", "node", "python", "java", "golang", "postgres"]):
+                keywords.update({"backend", "backend engineer", "backend developer", "systems engineer"})
+            if any(term in sk_lower for term in ["frontend", "react", "vue", "angular", "ui"]):
+                keywords.update({"frontend", "frontend engineer", "frontend developer", "web developer"})
+            if any(term in sk_lower for term in ["cloud", "devops", "aws", "docker", "kubernetes"]):
+                keywords.update({"devops", "cloud engineer", "infrastructure", "site reliability"})
+            if any(term in sk_lower for term in ["mobile", "flutter", "android", "ios", "react native"]):
+                keywords.update({"mobile", "android", "ios", "flutter", "react native"})
+
+    return keywords
+
+
 async def fetch_global_startup_jobs(
-    client: httpx.AsyncClient, query_role: str = ""
+    client: httpx.AsyncClient,
+    primary_role: str = "",
+    target_roles: list[str] | None = None,
+    skills: list[str] | None = None,
 ) -> list[JobListing]:
     """
     Fetch open job listings from global startup & tech job aggregators (Remotive & Arbeitnow).
-    Requires no API keys; searches live startup opportunities worldwide.
+    Filters listings to match candidate's target roles, derived skill roles (AI Engineer,
+    Backend Engineer, etc.), and common Software Engineer baseline roles.
     """
     jobs: list[JobListing] = []
+    keywords = build_role_keywords(primary_role, target_roles, skills)
 
     # 1. Remotive Public Startup & Remote Jobs API
-    remotive_url = "https://remotive.com/api/remote-jobs?limit=40"
+    remotive_url = "https://remotive.com/api/remote-jobs?limit=50"
     try:
         resp = await client.get(remotive_url)
         if resp.status_code == 200:
@@ -176,15 +235,18 @@ async def fetch_global_startup_jobs(
                 location = item.get("candidate_required_location", "Remote")
                 apply_url = item.get("url", "")
 
-                jobs.append(
-                    JobListing(
-                        company=company,
-                        title=title,
-                        location=location or "Remote",
-                        apply_url=apply_url or "https://remotive.com",
+                title_lower = title.lower()
+                # Filter to ensure job matches candidate's specific roles/skills or common baseline
+                if any(kw in title_lower for kw in keywords):
+                    jobs.append(
+                        JobListing(
+                            company=company,
+                            title=title,
+                            location=location or "Remote",
+                            apply_url=apply_url or "https://remotive.com",
+                        )
                     )
-                )
-            logger.info("🚀 Remotive Global Startups: fetched %d jobs", len(jobs))
+            logger.info("🚀 Remotive Global Startups: fetched %d matched jobs", len(jobs))
     except Exception as e:
         logger.warning("⚠️ Remotive fetch error: %s", e)
 
@@ -201,18 +263,20 @@ async def fetch_global_startup_jobs(
                 location = item.get("location", "Remote / Flexible")
                 apply_url = item.get("url", "")
 
-                jobs.append(
-                    JobListing(
-                        company=company,
-                        title=title,
-                        location=location or "Remote",
-                        apply_url=apply_url or "https://www.arbeitnow.com",
+                title_lower = title.lower()
+                if any(kw in title_lower for kw in keywords):
+                    jobs.append(
+                        JobListing(
+                            company=company,
+                            title=title,
+                            location=location or "Remote",
+                            apply_url=apply_url or "https://www.arbeitnow.com",
+                        )
                     )
-                )
-                count += 1
-                if count >= 30:
-                    break
-            logger.info("🌐 Arbeitnow Tech Jobs: fetched %d jobs", count)
+                    count += 1
+                    if count >= 30:
+                        break
+            logger.info("🌐 Arbeitnow Tech Jobs: fetched %d matched jobs", count)
     except Exception as e:
         logger.warning("⚠️ Arbeitnow fetch error: %s", e)
 
@@ -227,6 +291,9 @@ async def fetch_global_startup_jobs(
 async def fetch_all_jobs(
     company_slugs: list[str] | None = None,
     include_global_startups: bool = True,
+    primary_role: str = "",
+    target_roles: list[str] | None = None,
+    skills: list[str] | None = None,
 ) -> list[JobListing]:
     """
     Fetch jobs from target dream companies (Greenhouse, Lever, Ashby)
@@ -235,12 +302,20 @@ async def fetch_all_jobs(
     Args:
         company_slugs: Custom target/dream companies specified by the user
         include_global_startups: Whether to scan global startup job boards
+        primary_role: Candidate primary role title
+        target_roles: Candidate target roles
+        skills: Candidate extracted skills
 
     Returns:
         Combined, deduplicated list of JobListing objects.
     """
     slugs = company_slugs or []
-    logger.info("🔍 Fetching jobs — target_companies=%s, global_startups=%s", slugs, include_global_startups)
+    logger.info(
+        "🔍 Fetching jobs — target_companies=%s, primary_role='%s', skills=%s",
+        slugs,
+        primary_role,
+        skills[:4] if skills else [],
+    )
 
     all_jobs: list[JobListing] = []
 
@@ -255,9 +330,16 @@ async def fetch_all_jobs(
                 tasks.append(fetch_lever_jobs(client, clean_slug))
                 tasks.append(fetch_ashby_jobs(client, clean_slug))
 
-        # Global startup job boards
+        # Global startup job boards with role & skill filtering
         if include_global_startups:
-            tasks.append(fetch_global_startup_jobs(client))
+            tasks.append(
+                fetch_global_startup_jobs(
+                    client,
+                    primary_role=primary_role,
+                    target_roles=target_roles,
+                    skills=skills,
+                )
+            )
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
