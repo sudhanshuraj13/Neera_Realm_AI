@@ -1,43 +1,13 @@
 """
-Supervisor Agent — Master Orchestration & Quality Control Brain.
+Master Supervisor Agent & LangGraph State Machine Orchestrator.
 
-Powered by LangGraph state machine with reducer state accumulation & graceful degradation:
-  1. Classifies user intent (jobs / resume / financial / calendar / mixed / general)
-  2. Dynamically routes to specialist sub-agents (Job Agent, Resume Agent, Financial Agent, Calendar Agent)
-  3. Accumulates sub-agent outputs via Annotated[list[dict], operator.add] without overwriting
-  4. Handles graceful sub-agent degradation (e.g., ATS API outages or timeouts) via error state flags
-  5. Supervises & audits sub-agent outputs against ground-truth user context to eliminate hallucinations
-  6. Consolidates verified agent outputs via Synthesis Agent into Telegram HTML
-  7. Returns structured OrchestrateResponse
-
-LangGraph State Machine Flow:
-                ┌──────────────────┐
-                │  classify_node   │
-                └────────┬─────────┘
-                         │ (route_after_classification)
-        ┌────────────────┼────────────────┬────────────────┬────────────────┐
-        ▼                ▼                ▼                ▼                ▼
-     "jobs"          "resume"        "financial"       "calendar"        "mixed"
-        │                │                │                │                │
-        ▼                ▼                ▼                ▼                │
-   [jobs_node]    [resume_node]   [financial_node] [calendar_node]   [mixed_chain]
-        │                │                │                │                │
-        └────────────────┴────────────────┴────────────────┼────────────────┘
-                                                           ▼
-                                                  ┌──────────────────┐
-                                                  │  supervise_node  │
-                                                  └────────┬─────────┘
-                                                           ▼
-                                                  ┌──────────────────┐
-                                                  │ synthesize_node  │
-                                                  └────────┬─────────┘
-                                                           ▼
-                                                          END
+Fully asynchronous multi-agent supervisor built natively with LangGraph StateGraph.
+Controls classification, routing, state accumulation, quality supervision (anti-hallucination),
+Human-in-the-Loop (HITL) clarification, and response synthesis.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import operator
@@ -45,8 +15,8 @@ from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from ..schemas.orchestrate import OrchestrateRequest, OrchestrateResponse
-from .base import AgentResult, get_llm
+from app.agents.base import AgentResult, get_llm
+from app.schemas.orchestrate import OrchestrateRequest, OrchestrateResponse
 from .calendar_agent import run_calendar_agent
 from .financial import run_financial_agent
 from .job_agent import run_job_agent
@@ -123,11 +93,11 @@ Return a cleansed, verified summary of the findings with NO hallucinations.
 
 
 # ---------------------------------------------------------------------------
-# LangGraph Node Functions (Return Delta Dicts for State Accumulation)
+# Native Async LangGraph Node Functions
 # ---------------------------------------------------------------------------
 
-def classify_intent_node(state: OrchestratorState) -> dict[str, Any]:
-    """Node 1: Classify user intent using LLM supervisor."""
+async def classify_intent_node(state: OrchestratorState) -> dict[str, Any]:
+    """Node 1: Classify user intent using LLM supervisor natively async."""
     request = OrchestrateRequest(**state["request"])
     llm = get_llm()
 
@@ -143,7 +113,7 @@ def classify_intent_node(state: OrchestratorState) -> dict[str, Any]:
     )
 
     try:
-        response = llm.invoke(
+        response = await llm.ainvoke(
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": request.prompt},
@@ -152,7 +122,6 @@ def classify_intent_node(state: OrchestratorState) -> dict[str, Any]:
 
         raw_text = response.content if hasattr(response, "content") else str(response)
 
-        # Parse intent from JSON response
         cleaned = raw_text.strip()
         if "```" in cleaned:
             cleaned = cleaned.split("```json")[-1].split("```")[0].strip()
@@ -181,28 +150,12 @@ def classify_intent_node(state: OrchestratorState) -> dict[str, Any]:
     }
 
 
-import concurrent.futures
-
-def run_async_safely(coro):
-    """Safely execute an async coroutine whether or not an asyncio event loop is running."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return pool.submit(lambda: asyncio.run(coro)).result()
-    else:
-        return asyncio.run(coro)
-
-
-def run_jobs_node(state: OrchestratorState) -> dict[str, Any]:
-    """Node 2a: Execute the Job / Career Agent with graceful error degradation."""
+async def run_jobs_node(state: OrchestratorState) -> dict[str, Any]:
+    """Node 2a: Execute the Job / Career Agent asynchronously with graceful error degradation."""
     request = OrchestrateRequest(**state["request"])
 
     try:
-        result = run_async_safely(run_job_agent(request.prompt, request.context))
+        result = await run_job_agent(request.prompt, request.context)
         return {
             "agent_results": [
                 {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
@@ -224,12 +177,12 @@ def run_jobs_node(state: OrchestratorState) -> dict[str, Any]:
         }
 
 
-def run_resume_node(state: OrchestratorState) -> dict[str, Any]:
-    """Node 2b: Execute the Resume Intelligence Agent with graceful error degradation."""
+async def run_resume_node(state: OrchestratorState) -> dict[str, Any]:
+    """Node 2b: Execute the Resume Intelligence Agent asynchronously with graceful error degradation."""
     request = OrchestrateRequest(**state["request"])
 
     try:
-        result = run_async_safely(run_resume_agent(request.prompt, request.context))
+        result = await run_resume_agent(request.prompt, request.context)
         return {
             "agent_results": [
                 {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
@@ -251,7 +204,7 @@ def run_resume_node(state: OrchestratorState) -> dict[str, Any]:
         }
 
 
-def run_financial_node(state: OrchestratorState) -> dict[str, Any]:
+async def run_financial_node(state: OrchestratorState) -> dict[str, Any]:
     """Node 2c: Execute the Financial Agent with graceful error degradation."""
     request = OrchestrateRequest(**state["request"])
 
@@ -278,7 +231,7 @@ def run_financial_node(state: OrchestratorState) -> dict[str, Any]:
         }
 
 
-def run_calendar_node(state: OrchestratorState) -> dict[str, Any]:
+async def run_calendar_node(state: OrchestratorState) -> dict[str, Any]:
     """Node 2d: Execute the Calendar Agent with graceful error degradation."""
     request = OrchestrateRequest(**state["request"])
 
@@ -305,7 +258,7 @@ def run_calendar_node(state: OrchestratorState) -> dict[str, Any]:
         }
 
 
-def supervise_node(state: OrchestratorState) -> dict[str, Any]:
+async def supervise_node(state: OrchestratorState) -> dict[str, Any]:
     """
     Node 3: Supervisor Quality Control & Human-In-The-Loop (HITL) Parameter Audit.
 
@@ -320,7 +273,6 @@ def supervise_node(state: OrchestratorState) -> dict[str, Any]:
     location_pref = user_prefs.get("locationPreference") or user_prefs.get("location_preference")
     prompt_lower = request.prompt.strip().lower()
 
-    # Rule: Check if job search lacks location preference or is overly vague
     if intent in ("jobs", "mixed") or any(kw in prompt_lower for kw in ["find job", "get job", "looking for job", "show job"]):
         is_vague = prompt_lower in {"find me a job", "get jobs", "jobs", "show jobs", "job", "find job", "look for job"}
         if not location_pref or is_vague:
@@ -366,7 +318,7 @@ def supervise_node(state: OrchestratorState) -> dict[str, Any]:
     )
 
     try:
-        response = llm.invoke(
+        response = await llm.ainvoke(
             [
                 {"role": "system", "content": audit_prompt},
                 {"role": "user", "content": "Audit and verify the above sub-agent outputs for truthfulness and accuracy."},
@@ -393,7 +345,7 @@ def supervise_node(state: OrchestratorState) -> dict[str, Any]:
         }
 
 
-def run_synthesis_node(state: OrchestratorState) -> dict[str, Any]:
+async def run_synthesis_node(state: OrchestratorState) -> dict[str, Any]:
     """
     Node 4: Consolidate verified agent outputs into final response.
 
@@ -441,12 +393,12 @@ def run_synthesis_node(state: OrchestratorState) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# LangGraph Routing Logic
+# State Machine Graph Construction
 # ---------------------------------------------------------------------------
 
 def route_after_classification(state: OrchestratorState) -> str:
-    """Conditional edge: decide which agent(s) to invoke based on classified intent."""
-    intent = state["intent"]
+    """Conditional edge router after Node 1 intent classification."""
+    intent = state.get("intent", "general")
 
     if intent == "jobs":
         return "jobs"
@@ -459,19 +411,14 @@ def route_after_classification(state: OrchestratorState) -> str:
     elif intent == "mixed":
         return "mixed_jobs"
     else:
-        # General chat — skip sub-agents, go directly to synthesis
         return "synthesize"
 
 
-# ---------------------------------------------------------------------------
-# LangGraph State Machine Builder
-# ---------------------------------------------------------------------------
-
 def _build_graph() -> StateGraph:
-    """Construct the unified LangGraph state machine with accumulator state & sub-agents."""
+    """Construct the LangGraph state machine graph with native async nodes."""
     graph = StateGraph(OrchestratorState)
 
-    # Register nodes
+    # Add Nodes
     graph.add_node("classify", classify_intent_node)
     graph.add_node("jobs", run_jobs_node)
     graph.add_node("resume", run_resume_node)
@@ -483,7 +430,7 @@ def _build_graph() -> StateGraph:
     graph.add_node("supervise", supervise_node)
     graph.add_node("synthesize", run_synthesis_node)
 
-    # Entry point
+    # Set Entry Point
     graph.set_entry_point("classify")
 
     # Conditional routing after classification
@@ -530,16 +477,7 @@ _compiled_graph = _build_graph().compile()
 
 async def run_orchestration(request: OrchestrateRequest) -> OrchestrateResponse:
     """
-    Execute the full multi-agent orchestration pipeline.
-
-    Flow via LangGraph:
-      1. Supervisor classifies intent (jobs / resume / financial / calendar / mixed / general)
-      2. Routes to Job / Resume / Financial / Calendar / all / none
-      3. Accumulates outputs via Annotated[list[dict], operator.add] without overwriting
-      4. Degrades gracefully on sub-agent errors / timeouts via error state flags
-      5. Supervisor audits & quality-checks outputs against hallucinations
-      6. Synthesis consolidates into Telegram HTML
-      7. Returns structured OrchestrateResponse
+    Execute the full multi-agent orchestration pipeline using native async ainvoke.
     """
     initial_state: OrchestratorState = {
         "request": request.model_dump(),
@@ -552,7 +490,6 @@ async def run_orchestration(request: OrchestrateRequest) -> OrchestrateResponse:
         "final_response": {},
     }
 
-    loop = asyncio.get_event_loop()
-    final_state = await loop.run_in_executor(None, _compiled_graph.invoke, initial_state)
+    final_state = await _compiled_graph.ainvoke(initial_state)
 
     return OrchestrateResponse(**final_state["final_response"])

@@ -5,27 +5,30 @@ This log is structured for vibe coding. Each update is documented in three clean
 2. **The Prompt (How to talk to the AI about it)**: The instruction used to generate or modify the feature.
 3. **The Snippet (The Code)**: Concise code snippet showing the core implementation.
 
-## [2026-08-11] — Bug Fix: Event Loop Execution & Conversation Memory Windowing
+## [2026-08-11] — Refactor: Native Async LangGraph Nodes & Non-Blocking Orchestration
 
-### 0. Python Event Loop Thread Runner Fix
-- **The Vibe (What changed & Why)**: Fixed `RuntimeError: This event loop is already running` in `supervisor.py` by introducing `run_async_safely()`. Previously, `loop.run_until_complete()` inside FastAPI's running event loop threw runtime exceptions, triggering the fallback error message *"⚠️ ATS Job Matching service is temporarily updating"*.
+### 0. Native Async LangGraph Node Functions
+- **The Vibe (What changed & Why)**: Refactored all nodes in `supervisor.py` (`classify_intent_node`, `run_jobs_node`, `run_resume_node`, `run_financial_node`, `run_calendar_node`, `supervise_node`, `run_synthesis_node`) to native `async def` coroutines. Removed all thread-pool runners and event loop hacks, using `await run_job_agent(...)`, `await llm.ainvoke(...)`, and `await _compiled_graph.ainvoke(initial_state)` for 100% non-blocking, high-performance asyncio execution inside FastAPI.
 - **The Prompt (How to talk to the AI about it)**:
-  > Replace loop.run_until_complete inside run_jobs_node and run_resume_node in supervisor.py with a safe thread-pool runner (run_async_safely) to prevent event loop collision errors inside FastAPI.
+  > Refactor all LangGraph nodes in supervisor.py to native async def functions. Remove thread pools or run_until_complete hacks. Use await natively for sub-agent execution and await _compiled_graph.ainvoke(initial_state).
 - **The Snippet (The Code)**:
   ```python
-  import concurrent.futures
-
-  def run_async_safely(coro):
+  # Native Async LangGraph Node Functions
+  async def run_jobs_node(state: OrchestratorState) -> dict[str, Any]:
+      request = OrchestrateRequest(**state["request"])
       try:
-          loop = asyncio.get_running_loop()
-      except RuntimeError:
-          loop = None
+          result = await run_job_agent(request.prompt, request.context)
+          return {
+              "agent_results": [
+                  {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
+              ]
+          }
+      except Exception as e:
+          logger.error("❌ Job Agent execution error: %s", e)
 
-      if loop and loop.is_running():
-          with concurrent.futures.ThreadPoolExecutor() as pool:
-              return pool.submit(lambda: asyncio.run(coro)).result()
-      else:
-          return asyncio.run(coro)
+  async def run_orchestration(request: OrchestrateRequest) -> OrchestrateResponse:
+      final_state = await _compiled_graph.ainvoke(initial_state)
+      return OrchestrateResponse(**final_state["final_response"])
   ```
 
 ### 1. Cross-Deployment Chat History Windowing
