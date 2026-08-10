@@ -1,12 +1,11 @@
 """
 Job Matching Agent.
 
-Fetches live job listings from public ATS APIs (Greenhouse, Lever, Ashby) via ats_service,
-scores and ranks them against the user's extracted ResumeProfile, and formats a clean
-Telegram HTML response.
+Fetches live job listings dynamically across global startup boards (Remotive, Arbeitnow)
+and user-configured target dream companies (Greenhouse, Lever, Ashby via ats_service).
 
-Supports strict experience-level filtering (Fresher / Junior / Senior) to ensure freshers
-never receive irrelevant senior job postings.
+Scores and ranks job postings against candidate profile with strict Fresher/Senior filtering
+and target company boosting.
 """
 
 from __future__ import annotations
@@ -18,24 +17,6 @@ from app.schemas.job_listing import JobListing
 from app.services.ats_service import fetch_all_jobs
 
 logger = logging.getLogger("neera_ai_service.job_agent")
-
-DEFAULT_COMPANIES = [
-    "stripe",
-    "openai",
-    "vercel",
-    "notion",
-    "figma",
-    "linear",
-    "github",
-    "cloudflare",
-    "discord",
-    "postman",
-    "freshworks",
-    "browserstack",
-    "hasura",
-    "harness",
-    "datadog",
-]
 
 SENIOR_TERMS = {
     "senior",
@@ -70,17 +51,20 @@ def score_job_match(
     target_roles: list[str],
     skills: list[str],
     years_experience: int = 0,
-    experience_level: str = "auto",  # "fresher" | "junior" | "senior" | "auto"
+    experience_level: str = "auto",
+    target_companies: list[str] | None = None,
 ) -> tuple[int, str]:
     """
     Score a job listing against candidate profile (0–100%).
     Strictly filters out senior roles if the candidate is a fresher.
+    Boosts matches at candidate's target dream companies.
 
     Returns:
         (score, reason_text)
     """
     title_lower = job.title.lower()
     role_lower = primary_role.lower()
+    company_lower = job.company.lower()
 
     # Determine if candidate is a fresher
     is_fresher = (
@@ -114,7 +98,6 @@ def score_job_match(
 
     if is_fresher:
         if has_senior_title:
-            # Strictly exclude senior positions for freshers
             return 0, "Requires Senior Experience (Excluded)"
         elif has_entry_title:
             base_score = 75
@@ -138,7 +121,16 @@ def score_job_match(
     score = base_score
     reasons = [reason]
 
-    # 2. Title & Target Role Matching
+    # 2. Target Dream Company Boost
+    if target_companies:
+        for tc in target_companies:
+            tc_clean = tc.strip().lower()
+            if tc_clean and tc_clean in company_lower:
+                score += 20
+                reasons.append(f"🎯 Target Dream Company ({tc.title()})")
+                break
+
+    # 3. Title & Target Role Matching
     all_target_roles = [role_lower] + [r.lower() for r in target_roles]
     matched_role = None
     for tr in all_target_roles:
@@ -161,7 +153,7 @@ def score_job_match(
     ):
         score += 10
 
-    # 3. Skill matching
+    # 4. Skill matching
     matched_skills = []
     for skill in skills:
         sk_lower = skill.lower()
@@ -184,17 +176,21 @@ async def match_jobs_for_resume(
     experience_level_override: str | None = None,
 ) -> dict[str, Any]:
     """
-    Fetch live ATS jobs and match them against candidate's resume profile.
+    Fetch live jobs from target dream companies and global startup boards,
+    scoring and matching them against candidate's profile.
 
     Args:
         resume_profile: Dictionary representation of ResumeProfile
-        company_slugs: Optional list of ATS company slugs to query
+        company_slugs: Custom target company slugs specified by user
         experience_level_override: Optional experience filter ("fresher" | "junior" | "senior")
 
     Returns:
-        Dict with total_found, matched_count, experience_level, and formatted_html
+        Dict with total_found, matched_count, experience_level, target_companies, and formatted_html
     """
-    slugs = company_slugs or DEFAULT_COMPANIES
+    # Extract candidate target companies (either explicitly passed or from resume profile)
+    target_companies = company_slugs or resume_profile.get("target_companies", [])
+    if isinstance(target_companies, str):
+        target_companies = [c.strip() for c in target_companies.split(",") if c.strip()]
 
     primary_role = str(resume_profile.get("primary_role", "Software Engineer"))
     target_roles = [str(r) for r in resume_profile.get("target_roles", [])]
@@ -222,37 +218,33 @@ async def match_jobs_for_resume(
     )
 
     logger.info(
-        "🔍 Job matching initiated — role='%s', exp_level=%s (years=%d), target_roles=%s",
+        "🔍 Job discovery initiated — role='%s', exp_level=%s, target_companies=%s",
         primary_role,
         exp_label,
-        years_exp,
-        target_roles,
+        target_companies,
     )
 
-    # 1. Fetch live jobs from ATS endpoints
-    all_jobs = await fetch_all_jobs(slugs)
+    # 1. Fetch live jobs dynamically (target companies + global startup job aggregators)
+    all_jobs = await fetch_all_jobs(
+        company_slugs=target_companies,
+        include_global_startups=True,
+    )
 
     if not all_jobs:
-        # Fallback response if external ATS endpoints are unreachable
         html = [
-            "<b>💼 Live Tech Job Board Matches</b>",
+            "<b>💼 Dynamic Job Board Matcher</b>",
             "",
             f"<b>🎯 Role:</b> <code>{primary_role}</code>",
             f"<b>{exp_label}</b>",
-            f"<b>🛠️ Skills:</b> {', '.join(skills[:5]) if skills else 'Software Engineering'}",
+            f"<b>🏢 Target Companies:</b> {', '.join(target_companies) if target_companies else 'All Global Startups & Tech'}",
             "",
-            "⚠️ Live ATS sync is updating. Here are top tech career portals matching your role:",
-            "• 🌐 <a href='https://openai.com/careers'>OpenAI Careers</a>",
-            "• 🌐 <a href='https://stripe.com/jobs'>Stripe Careers</a>",
-            "• 🌐 <a href='https://vercel.com/careers'>Vercel Careers</a>",
-            "• 🌐 <a href='https://notion.so/careers'>Notion Careers</a>",
-            "",
-            "<i>Type <code>/jobs</code> to refresh live ATS openings anytime!</i>",
+            "⚠️ Job search engine is currently updating. Try <code>/jobs</code> again in a moment!",
         ]
         return {
             "total_found": 0,
             "matched_count": 0,
             "experience_level": exp_label,
+            "target_companies": target_companies,
             "formatted_html": "\n".join(html),
             "jobs": [],
         }
@@ -267,9 +259,9 @@ async def match_jobs_for_resume(
             skills,
             years_experience=years_exp,
             experience_level=exp_level,
+            target_companies=target_companies,
         )
 
-        # Skip zero-score excluded jobs (e.g. senior jobs for freshers)
         if score <= 0:
             continue
 
@@ -287,24 +279,26 @@ async def match_jobs_for_resume(
     # Sort descending by match score
     scored_jobs.sort(key=lambda x: x["score"], reverse=True)
 
-    # Take top 6 matched jobs
     top_matches = scored_jobs[:6]
 
-    # 3. Format Telegram HTML message
+    # 3. Format Telegram HTML response
+    target_comp_str = ", ".join([c.title() for c in target_companies]) if target_companies else "Open (Tell bot e.g. 'Add Google to target companies')"
+
     html_lines = [
         "<b>💼 Live Matched Job Openings</b>",
         "",
         f"<b>🎯 Role:</b> <code>{primary_role}</code>",
         f"<b>{exp_label}</b>",
-        f"<b>🛠️ Top Skills:</b> {', '.join(skills[:6]) if skills else 'General Engineering'}",
-        f"<b>⚡ Live ATS Scanned:</b> {len(all_jobs)} openings across tech leaders & startups",
+        f"<b>🏢 Target Companies:</b> {target_comp_str}",
+        f"<b>🛠️ Top Skills:</b> {', '.join(skills[:5]) if skills else 'Software Engineering'}",
+        f"<b>⚡ Live Discovered:</b> {len(all_jobs)} open postings across global startups & tech",
         "",
     ]
 
     if not top_matches:
         html_lines.extend([
-            "ℹ️ No active entry-level openings matched right now across scanned company boards.",
-            "👉 Try switching experience filter using the buttons below or check back soon!",
+            "ℹ️ No active openings matched your criteria right now.",
+            "👉 Tell the bot your dream companies (e.g. <i>'Add Razorpay, Stripe to my target companies'</i>) to watch for new alerts!",
             "",
         ])
     else:
@@ -318,13 +312,14 @@ async def match_jobs_for_resume(
                 "",
             ])
 
-    html_lines.append("<i>💡 Tap a button below to filter jobs by your experience level!</i>")
+    html_lines.append("<i>💡 Chat with me anytime to add target companies or set up job alerts!</i>")
 
     return {
         "total_found": len(all_jobs),
         "matched_count": len(top_matches),
         "experience_level": exp_label,
         "is_fresher": is_fresher,
+        "target_companies": target_companies,
         "formatted_html": "\n".join(html_lines),
         "jobs": top_matches,
     }
@@ -351,6 +346,7 @@ async def run_job_agent(prompt: str, context: Any) -> Any:
 
     resume_profile = user_prefs.get("resumeJson") or user_prefs.get("resume_profile") or {}
     exp_override = user_prefs.get("experience_level")
+    target_comps = user_prefs.get("target_companies") or resume_profile.get("target_companies")
 
     if not resume_profile:
         content = (
@@ -367,6 +363,7 @@ async def run_job_agent(prompt: str, context: Any) -> Any:
 
     match_res = await match_jobs_for_resume(
         resume_profile,
+        company_slugs=target_comps,
         experience_level_override=exp_override,
     )
     return AgentResult(

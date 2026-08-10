@@ -376,13 +376,86 @@ export function registerResumeHandlers(bot: Bot): void {
     await sendSafeTelegramMessage(
       ctx,
       [
-        "<b>💻 Tech Career Intelligence & ATS Matching</b>",
+        "<b>💻 Tech Career Intelligence & Job Matching</b>",
         "",
-        "Neera AI syncs directly with public ATS endpoints (Greenhouse, Lever, Ashby) to aggregate live job listings from tech giants & high-growth startups (Stripe, OpenAI, Vercel, Notion, etc.).",
+        "Neera AI dynamically scans global startup boards & target company ATS feeds (Greenhouse, Lever, Ashby) to aggregate live job listings.",
         "",
-        "To get personalized job recommendations:",
-        "👉 Click <b>📄 Upload Resume</b> or send your resume PDF to start!",
+        "To customize your target companies or start:",
+        "• Type <code>/target_companies Google, Stripe, Razorpay</code> to set dream companies!",
+        "• Click <b>📄 Upload Resume</b> or send your resume PDF to match jobs!",
       ].join("\n")
     );
+  });
+
+  // Command handler for /target_companies (or /dream_companies)
+  bot.command(["target_companies", "dream_companies"], async (ctx) => {
+    await ctx.replyWithChatAction("typing");
+    const from = ctx.from;
+    if (!from) return;
+
+    try {
+      const user = await getOrCreateUser(
+        BigInt(from.id),
+        from.first_name,
+        from.username
+      );
+
+      const profile = (user.resumeJson as Record<string, unknown>) || {};
+      const textArgs = ctx.match.trim();
+
+      if (textArgs) {
+        // User provided company list, e.g. "/target_companies Razorpay, Stripe, OpenAI"
+        const newCompanies = textArgs
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        const updatedProfile = {
+          ...profile,
+          target_companies: newCompanies,
+        };
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { resumeJson: updatedProfile as object },
+        });
+
+        await sendSafeTelegramMessage(
+          ctx,
+          [
+            "🎯 <b>Target Dream Companies Updated!</b>",
+            "",
+            `<b>Active Target Companies:</b> ${newCompanies.map((c) => `<code>${c}</code>`).join(", ")}`,
+            "",
+            "⚡ <i>Neera AI will now prioritize and scan these target companies for you! Type <code>/jobs</code> to view live matched openings.</i>",
+          ].join("\n")
+        );
+        return;
+      }
+
+      // Display current target companies & instructions
+      const existing = (profile["target_companies"] as string[]) || [];
+
+      await sendSafeTelegramMessage(
+        ctx,
+        [
+          "🎯 <b>Target Dream Companies Watchlist</b>",
+          "",
+          existing.length > 0
+            ? `<b>Active Target Companies:</b> ${existing.map((c) => `<code>${c}</code>`).join(", ")}`
+            : "<b>Active Target Companies:</b> <i>None set (scanning all global startup job boards)</i>",
+          "",
+          "<b>How to set your dream companies:</b>",
+          "• Type <code>/target_companies Google, Stripe, Razorpay, OpenAI</code>",
+          "• Or type <code>/jobs</code> anytime to browse live startup job feeds!",
+        ].join("\n")
+      );
+    } catch (err) {
+      console.error("❌ Target companies handler error:", err);
+      await sendSafeTelegramMessage(
+        ctx,
+        "⚠️ Could not update target companies. Please try again."
+      );
+    }
   });
 }

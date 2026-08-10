@@ -55,6 +55,10 @@ class ResumeProfile(BaseModel):
         default_factory=list,
         description="Industries or domains the candidate prefers (e.g. 'FinTech', 'AI/ML')",
     )
+    target_companies: list[str] = Field(
+        default_factory=list,
+        description="Target or dream companies candidate wants to watch or apply for",
+    )
     experience: list[Experience] = Field(
         default_factory=list,
         description="Work experience entries",

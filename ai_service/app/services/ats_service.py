@@ -155,35 +155,109 @@ async def fetch_ashby_jobs(
         return []
 
 
+async def fetch_global_startup_jobs(
+    client: httpx.AsyncClient, query_role: str = ""
+) -> list[JobListing]:
+    """
+    Fetch open job listings from global startup & tech job aggregators (Remotive & Arbeitnow).
+    Requires no API keys; searches live startup opportunities worldwide.
+    """
+    jobs: list[JobListing] = []
+
+    # 1. Remotive Public Startup & Remote Jobs API
+    remotive_url = "https://remotive.com/api/remote-jobs?limit=40"
+    try:
+        resp = await client.get(remotive_url)
+        if resp.status_code == 200:
+            data = resp.json()
+            for item in data.get("jobs", []):
+                company = item.get("company_name", "Startup")
+                title = item.get("title", "Software Engineer")
+                location = item.get("candidate_required_location", "Remote")
+                apply_url = item.get("url", "")
+
+                jobs.append(
+                    JobListing(
+                        company=company,
+                        title=title,
+                        location=location or "Remote",
+                        apply_url=apply_url or "https://remotive.com",
+                    )
+                )
+            logger.info("🚀 Remotive Global Startups: fetched %d jobs", len(jobs))
+    except Exception as e:
+        logger.warning("⚠️ Remotive fetch error: %s", e)
+
+    # 2. Arbeitnow Public Tech Job Board API
+    arbeitnow_url = "https://www.arbeitnow.com/api/job-board-api"
+    try:
+        resp = await client.get(arbeitnow_url)
+        if resp.status_code == 200:
+            data = resp.json()
+            count = 0
+            for item in data.get("data", []):
+                company = item.get("company_name", "Tech Startup")
+                title = item.get("title", "Developer")
+                location = item.get("location", "Remote / Flexible")
+                apply_url = item.get("url", "")
+
+                jobs.append(
+                    JobListing(
+                        company=company,
+                        title=title,
+                        location=location or "Remote",
+                        apply_url=apply_url or "https://www.arbeitnow.com",
+                    )
+                )
+                count += 1
+                if count >= 30:
+                    break
+            logger.info("🌐 Arbeitnow Tech Jobs: fetched %d jobs", count)
+    except Exception as e:
+        logger.warning("⚠️ Arbeitnow fetch error: %s", e)
+
+    return jobs
+
+
 # ---------------------------------------------------------------------------
 # Aggregator
 # ---------------------------------------------------------------------------
 
 
-async def fetch_all_jobs(company_slugs: list[str]) -> list[JobListing]:
+async def fetch_all_jobs(
+    company_slugs: list[str] | None = None,
+    include_global_startups: bool = True,
+) -> list[JobListing]:
     """
-    Fetch jobs from all ATS providers for the given company slugs.
-
-    Hits Greenhouse, Lever, and Ashby in parallel for each company.
-    Failed requests are logged and silently skipped — partial results
-    are always returned.
+    Fetch jobs from target dream companies (Greenhouse, Lever, Ashby)
+    plus global startup job boards (Remotive, Arbeitnow).
 
     Args:
-        company_slugs: List of company slugs (e.g. ['stripe', 'openai', 'vercel', 'notion']).
+        company_slugs: Custom target/dream companies specified by the user
+        include_global_startups: Whether to scan global startup job boards
 
     Returns:
         Combined, deduplicated list of JobListing objects.
     """
-    logger.info("🔍 Fetching jobs for %d companies: %s", len(company_slugs), company_slugs)
+    slugs = company_slugs or []
+    logger.info("🔍 Fetching jobs — target_companies=%s, global_startups=%s", slugs, include_global_startups)
 
     all_jobs: list[JobListing] = []
 
     async with httpx.AsyncClient(timeout=ATS_TIMEOUT) as client:
         tasks = []
-        for slug in company_slugs:
-            tasks.append(fetch_greenhouse_jobs(client, slug))
-            tasks.append(fetch_lever_jobs(client, slug))
-            tasks.append(fetch_ashby_jobs(client, slug))
+
+        # Target dream companies specified by user
+        for slug in slugs:
+            clean_slug = slug.strip().lower().replace(" ", "")
+            if clean_slug:
+                tasks.append(fetch_greenhouse_jobs(client, clean_slug))
+                tasks.append(fetch_lever_jobs(client, clean_slug))
+                tasks.append(fetch_ashby_jobs(client, clean_slug))
+
+        # Global startup job boards
+        if include_global_startups:
+            tasks.append(fetch_global_startup_jobs(client))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -194,5 +268,5 @@ async def fetch_all_jobs(company_slugs: list[str]) -> list[JobListing]:
             if isinstance(result, list):
                 all_jobs.extend(result)
 
-    logger.info("✅ Total jobs fetched: %d across %d companies", len(all_jobs), len(company_slugs))
+    logger.info("✅ Total jobs fetched: %d across target companies & global startup boards", len(all_jobs))
     return all_jobs
