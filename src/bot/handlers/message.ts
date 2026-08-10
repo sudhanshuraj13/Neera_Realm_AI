@@ -25,10 +25,11 @@ async function routeViaPythonService(
   userPreferences: Record<string, unknown>
 ): Promise<{ replyText: string; intentDetected: string } | null> {
   try {
-    // 1. Fetch calendar events from Google Calendar via Node.js OAuth layer
+    // 1. Fetch calendar events and recent conversation history from Neon PostgreSQL
     const calendarEvents = await CalendarService.getUpcomingEvents(telegramId);
+    const history = await getRecentMessages(userId, 6);
 
-    // 2. Assemble context payload
+    // 2. Assemble context payload including persistent chat history window
     const context: OrchestrateContext = {
       calendar_events: calendarEvents.map((e) => ({
         title: e.title,
@@ -37,6 +38,7 @@ async function routeViaPythonService(
         description: e.description ?? null,
       })),
       user_preferences: userPreferences,
+      chat_history: history.map((h) => ({ role: h.role, content: h.content })),
     };
 
     // 3. Call Python FastAPI multi-agent engine

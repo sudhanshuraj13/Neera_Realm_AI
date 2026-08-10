@@ -181,20 +181,35 @@ def classify_intent_node(state: OrchestratorState) -> dict[str, Any]:
     }
 
 
+import concurrent.futures
+
+def run_async_safely(coro):
+    """Safely execute an async coroutine whether or not an asyncio event loop is running."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(lambda: asyncio.run(coro)).result()
+    else:
+        return asyncio.run(coro)
+
+
 def run_jobs_node(state: OrchestratorState) -> dict[str, Any]:
     """Node 2a: Execute the Job / Career Agent with graceful error degradation."""
     request = OrchestrateRequest(**state["request"])
 
     try:
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(run_job_agent(request.prompt, request.context))
+        result = run_async_safely(run_job_agent(request.prompt, request.context))
         return {
             "agent_results": [
                 {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
             ]
         }
     except Exception as e:
-        logger.error("❌ Job Agent execution error (degraded gracefully): %s", e)
+        logger.error("❌ Job Agent execution error (degraded gracefully): %s", e, exc_info=True)
         return {
             "errors": [
                 {"agent_name": "job", "error": f"ATS service unreachable: {str(e)}"}
@@ -214,15 +229,14 @@ def run_resume_node(state: OrchestratorState) -> dict[str, Any]:
     request = OrchestrateRequest(**state["request"])
 
     try:
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(run_resume_agent(request.prompt, request.context))
+        result = run_async_safely(run_resume_agent(request.prompt, request.context))
         return {
             "agent_results": [
                 {"content": result.content, "agent_name": result.agent_name, "metadata": result.metadata}
             ]
         }
     except Exception as e:
-        logger.error("❌ Resume Agent execution error (degraded gracefully): %s", e)
+        logger.error("❌ Resume Agent execution error (degraded gracefully): %s", e, exc_info=True)
         return {
             "errors": [
                 {"agent_name": "resume", "error": f"Resume service error: {str(e)}"}

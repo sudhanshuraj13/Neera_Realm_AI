@@ -30,6 +30,10 @@ class UserContext(BaseModel):
         default_factory=dict,
         description="User preferences (watchlist, industries, briefingTime, etc.)",
     )
+    chat_history: list[dict] = Field(
+        default_factory=list,
+        description="Recent message window retrieved from Neon PostgreSQL",
+    )
 
 
 class OrchestrateRequest(BaseModel):

@@ -27,6 +27,7 @@ export interface CalendarEventPayload {
 export interface OrchestrateContext {
   calendar_events: CalendarEventPayload[];
   user_preferences: Record<string, unknown>;
+  chat_history?: Array<{ role: string; content: string }>;
 }
 
 /** Response from POST /api/v1/orchestrate. */

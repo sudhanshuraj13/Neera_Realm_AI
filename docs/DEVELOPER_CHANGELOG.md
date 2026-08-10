@@ -5,6 +5,48 @@ This log is structured for vibe coding. Each update is documented in three clean
 2. **The Prompt (How to talk to the AI about it)**: The instruction used to generate or modify the feature.
 3. **The Snippet (The Code)**: Concise code snippet showing the core implementation.
 
+## [2026-08-11] — Bug Fix: Event Loop Execution & Conversation Memory Windowing
+
+### 0. Python Event Loop Thread Runner Fix
+- **The Vibe (What changed & Why)**: Fixed `RuntimeError: This event loop is already running` in `supervisor.py` by introducing `run_async_safely()`. Previously, `loop.run_until_complete()` inside FastAPI's running event loop threw runtime exceptions, triggering the fallback error message *"⚠️ ATS Job Matching service is temporarily updating"*.
+- **The Prompt (How to talk to the AI about it)**:
+  > Replace loop.run_until_complete inside run_jobs_node and run_resume_node in supervisor.py with a safe thread-pool runner (run_async_safely) to prevent event loop collision errors inside FastAPI.
+- **The Snippet (The Code)**:
+  ```python
+  import concurrent.futures
+
+  def run_async_safely(coro):
+      try:
+          loop = asyncio.get_running_loop()
+      except RuntimeError:
+          loop = None
+
+      if loop and loop.is_running():
+          with concurrent.futures.ThreadPoolExecutor() as pool:
+              return pool.submit(lambda: asyncio.run(coro)).result()
+      else:
+          return asyncio.run(coro)
+  ```
+
+### 1. Cross-Deployment Chat History Windowing
+- **The Vibe (What changed & Why)**: Updated `UserContext` and `routeViaPythonService` to pass `chat_history` (retrieved from Neon PostgreSQL via `getRecentMessages`) to the Python FastAPI microservice. The AI agent now maintains conversation memory across turns and container redeployments on Render.
+- **The Prompt (How to talk to the AI about it)**:
+  > Add chat_history to UserContext in Python FastAPI and pass recent history from getRecentMessages in message.ts so conversation memory persists across Render redeployments.
+- **The Snippet (The Code)**:
+  ```typescript
+  // Fetch calendar events and recent chat history window from Neon PostgreSQL
+  const calendarEvents = await CalendarService.getUpcomingEvents(telegramId);
+  const history = await getRecentMessages(userId, 6);
+
+  const context: OrchestrateContext = {
+    calendar_events: calendarEvents.map(...),
+    user_preferences: userPreferences,
+    chat_history: history.map((h) => ({ role: h.role, content: h.content })),
+  };
+  ```
+
+---
+
 ## [2026-08-11] — Security & Repository Hardening (.gitignore Audit)
 
 ### 0. Repository .gitignore Security Hardening
