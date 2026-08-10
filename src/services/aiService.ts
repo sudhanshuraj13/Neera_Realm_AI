@@ -50,7 +50,7 @@ export interface AiServiceError {
 
 const aiClient: AxiosInstance = axios.create({
   baseURL: process.env["AI_SERVICE_URL"] || "http://localhost:8000",
-  timeout: 15_000,
+  timeout: 60_000,
   headers: { "Content-Type": "application/json" },
 });
 

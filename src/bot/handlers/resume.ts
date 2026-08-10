@@ -223,10 +223,11 @@ export function registerResumeHandlers(bot: Bot): void {
     } catch (err) {
       if (isAiServiceError(err)) {
         console.error(`❌ [Jobs] AI service error: ${err.code} — ${err.message}`);
-        await sendSafeTelegramMessage(
-          ctx,
-          "⚠️ The job matching engine is temporarily updating. Please ensure the Python service is running (`npm run dev:ai`) and try /jobs again."
-        );
+        const hint =
+          err.code === "AI_SERVICE_TIMEOUT"
+            ? "⏳ <b>AI Engine Initializing:</b> The Python microservice is waking up on Render or scanning live ATS job feeds. Please wait 10 seconds and type <code>/jobs</code> again!"
+            : `⚠️ <b>AI Service Unreachable (${err.code}):</b> Please check that <code>AI_SERVICE_URL</code> is set correctly in your Render Web Service environment variables.`;
+        await sendSafeTelegramMessage(ctx, hint);
       } else {
         console.error("❌ [Jobs] Processing error:", err);
         await sendSafeTelegramMessage(
@@ -268,10 +269,18 @@ export function registerResumeHandlers(bot: Bot): void {
       await sendSafeTelegramMessage(ctx, result.formatted_html);
     } catch (err) {
       console.error("❌ Action fetch jobs error:", err);
-      await sendSafeTelegramMessage(
-        ctx,
-        "⚠️ Could not fetch job matches right now. Please ensure the Python AI service is running and try <code>/jobs</code>."
-      );
+      if (isAiServiceError(err)) {
+        const hint =
+          err.code === "AI_SERVICE_TIMEOUT"
+            ? "⏳ <b>AI Engine Initializing:</b> Service is warming up. Please tap <b>💼 View Matching Jobs</b> again in 10 seconds!"
+            : `⚠️ Could not reach AI service: ${err.message}`;
+        await sendSafeTelegramMessage(ctx, hint);
+      } else {
+        await sendSafeTelegramMessage(
+          ctx,
+          "⚠️ Could not fetch job matches right now. Please try again."
+        );
+      }
     }
   });
 
