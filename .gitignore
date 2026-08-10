@@ -1,33 +1,85 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
-
-# Production & Build outputs
-dist/
-build/
-*.tsbuildinfo
-
-# Environment & Secrets (NEVER commit secrets to GitHub)
+# ─────────────────────────────────────────────────────────────────────────────
+# Environment Files & Secrets (NEVER COMMIT SENSITIVE KEYS OR CREDENTIALS)
+# ─────────────────────────────────────────────────────────────────────────────
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 .env.*.local
+*.env
+ai_service/.env
+ai_service/.env.*
 *.pem
 *.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.token
+credentials.json
+client_secret*.json
+service-account*.json
+token.json
+tokens.json
 
-# Agent / Tooling files
-.cursorrules
-.agents/
-.neon
-skills-lock.json
-
-# Preserve example environment file
+# Preserve environment template files
 !.env.example
+!ai_service/.env.example
 
-# Logs
+# ─────────────────────────────────────────────────────────────────────────────
+# Dependencies & Package Managers
+# ─────────────────────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Production Builds & Compiled Output
+# ─────────────────────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Python Virtual Environments & Bytecode Artifacts
+# ─────────────────────────────────────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+ai_service/__pycache__/
+ai_service/**/__pycache__/
+ai_service/venv/
+ai_service/.venv/
+venv/
+.venv/
+env/
+.env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Agent Customizations, Local Brain & Tooling Artifacts
+# ─────────────────────────────────────────────────────────────────────────────
+.agents/
+.cursorrules
+.neon
+.brain/
+brain/
+skills-lock.json
+.antigravity/
+.gemini/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logs & Diagnostics Output
+# ─────────────────────────────────────────────────────────────────────────────
 logs/
 *.log
 npm-debug.log*
@@ -36,12 +88,30 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Scratch & Temporary testing directories
+# ─────────────────────────────────────────────────────────────────────────────
+# Temporary, Scratch, PDF Uploads & Storage Directories
+# ─────────────────────────────────────────────────────────────────────────────
 scratch/
 temp/
 tmp/
+.tmp/
+uploads/
+temp_uploads/
+*.pdf
 
-# OS Metadata & System files
+# ─────────────────────────────────────────────────────────────────────────────
+# Local Databases & Storage Locks
+# ─────────────────────────────────────────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+prisma/dev.db
+prisma/dev.db-journal
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OS Metadata & System Junk
+# ─────────────────────────────────────────────────────────────────────────────
 .DS_Store
 .DS_Store?
 ._*
@@ -49,8 +119,11 @@ tmp/
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# IDE & Editor configurations
+# ─────────────────────────────────────────────────────────────────────────────
+# IDE & Editor Configurations
+# ─────────────────────────────────────────────────────────────────────────────
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -61,19 +134,3 @@ Thumbs.db
 *.sublime-project
 *.swp
 *.swo
-
-# Coverage and testing reports
-coverage/
-.nyc_output/
-
-# Prisma / Local DB
-*.sqlite
-*.db
-
-# Python Microservice (ai_service/)
-ai_service/__pycache__/
-ai_service/**/__pycache__/
-ai_service/.env
-ai_service/venv/
-ai_service/.venv/
-*.pyc
