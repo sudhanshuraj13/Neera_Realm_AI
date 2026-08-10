@@ -218,15 +218,21 @@ async def jobs_match(payload: dict):
     user_id = payload.get("user_id", "unknown")
     resume_profile = payload.get("resume_profile", {})
     company_slugs = payload.get("company_slugs")
+    experience_level = payload.get("experience_level")
 
     logger.info(
-        "💼 Job match request — user_id=%s, primary_role='%s'",
+        "💼 Job match request — user_id=%s, primary_role='%s', exp_level=%s",
         user_id,
         resume_profile.get("primary_role", "Unknown"),
+        experience_level or "auto",
     )
 
     try:
-        match_result = await match_jobs_for_resume(resume_profile, company_slugs)
+        match_result = await match_jobs_for_resume(
+            resume_profile,
+            company_slugs,
+            experience_level_override=experience_level,
+        )
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         logger.info(

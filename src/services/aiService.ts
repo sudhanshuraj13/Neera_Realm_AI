@@ -170,20 +170,24 @@ export interface JobMatchResponse {
   formatted_html: string;
   total_found: number;
   matched_count: number;
+  experience_level?: string;
+  is_fresher?: boolean;
   jobs: Array<Record<string, unknown>>;
 }
 
 /**
- * Fetch live jobs matched against candidate's stored resume profile.
- *
- * @param userId Internal user ID
- * @param resumeProfile Resume profile stored in Neon DB (user.resumeJson)
- * @param companySlugs Optional list of company slugs
- */
+  * Fetch live jobs matched against candidate's stored resume profile.
+  *
+  * @param userId Internal user ID
+  * @param resumeProfile Resume profile stored in Neon DB (user.resumeJson)
+  * @param companySlugs Optional list of company slugs
+  * @param experienceLevel Optional experience level override ("fresher" | "junior" | "senior")
+  */
 export async function matchJobs(
   userId: string,
   resumeProfile: Record<string, unknown>,
-  companySlugs?: string[]
+  companySlugs?: string[],
+  experienceLevel?: string
 ): Promise<JobMatchResponse> {
   const { data } = await aiClient.post<JobMatchResponse>(
     "/api/v1/jobs/match",
@@ -191,6 +195,7 @@ export async function matchJobs(
       user_id: userId,
       resume_profile: resumeProfile,
       company_slugs: companySlugs,
+      experience_level: experienceLevel,
     }
   );
   return data;

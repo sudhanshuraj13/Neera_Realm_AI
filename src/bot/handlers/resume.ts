@@ -219,7 +219,15 @@ export function registerResumeHandlers(bot: Bot): void {
         user.resumeJson as Record<string, unknown>
       );
 
-      await sendSafeTelegramMessage(ctx, result.formatted_html);
+      const expFilterKeyboard = new InlineKeyboard()
+        .text("🎓 Fresher (0–1 yrs)", "action:exp_filter:fresher")
+        .text("💻 Junior (1–3 yrs)", "action:exp_filter:junior")
+        .row()
+        .text("🚀 Senior (3+ yrs)", "action:exp_filter:senior");
+
+      await sendSafeTelegramMessage(ctx, result.formatted_html, {
+        reply_markup: expFilterKeyboard,
+      });
     } catch (err) {
       if (isAiServiceError(err)) {
         console.error(`❌ [Jobs] AI service error: ${err.code} — ${err.message}`);
@@ -266,7 +274,15 @@ export function registerResumeHandlers(bot: Bot): void {
         user.resumeJson as Record<string, unknown>
       );
 
-      await sendSafeTelegramMessage(ctx, result.formatted_html);
+      const expFilterKeyboard = new InlineKeyboard()
+        .text("🎓 Fresher (0–1 yrs)", "action:exp_filter:fresher")
+        .text("💻 Junior (1–3 yrs)", "action:exp_filter:junior")
+        .row()
+        .text("🚀 Senior (3+ yrs)", "action:exp_filter:senior");
+
+      await sendSafeTelegramMessage(ctx, result.formatted_html, {
+        reply_markup: expFilterKeyboard,
+      });
     } catch (err) {
       console.error("❌ Action fetch jobs error:", err);
       if (isAiServiceError(err)) {
@@ -281,6 +297,57 @@ export function registerResumeHandlers(bot: Bot): void {
           "⚠️ Could not fetch job matches right now. Please try again."
         );
       }
+    }
+  });
+
+  // Callback query for experience level filter buttons: action:exp_filter:fresher, action:exp_filter:junior, action:exp_filter:senior
+  bot.callbackQuery(/^action:exp_filter:(fresher|junior|senior)$/, async (ctx) => {
+    const level = ctx.match[1];
+    const label = level === "fresher" ? "Fresher (0-1 yrs)" : (level === "junior" ? "Junior (1-3 yrs)" : "Senior (3+ yrs)");
+    await ctx.answerCallbackQuery({ text: `Filtering jobs: ${label}` });
+
+    const from = ctx.from;
+    if (!from) return;
+
+    await ctx.replyWithChatAction("typing");
+
+    try {
+      const user = await getOrCreateUser(
+        BigInt(from.id),
+        from.first_name,
+        from.username
+      );
+
+      if (!user.resumeJson) {
+        await sendSafeTelegramMessage(
+          ctx,
+          "⚠️ Please upload your resume using <code>/resume</code> first!"
+        );
+        return;
+      }
+
+      const result = await matchJobs(
+        user.id,
+        user.resumeJson as Record<string, unknown>,
+        undefined,
+        level
+      );
+
+      const expFilterKeyboard = new InlineKeyboard()
+        .text(level === "fresher" ? "✅ Fresher (0–1 yrs)" : "🎓 Fresher (0–1 yrs)", "action:exp_filter:fresher")
+        .text(level === "junior" ? "✅ Junior (1–3 yrs)" : "💻 Junior (1–3 yrs)", "action:exp_filter:junior")
+        .row()
+        .text(level === "senior" ? "✅ Senior (3+ yrs)" : "🚀 Senior (3+ yrs)", "action:exp_filter:senior");
+
+      await sendSafeTelegramMessage(ctx, result.formatted_html, {
+        reply_markup: expFilterKeyboard,
+      });
+    } catch (err) {
+      console.error("❌ Exp filter action error:", err);
+      await sendSafeTelegramMessage(
+        ctx,
+        "⚠️ Could not refresh job filter right now. Please try again."
+      );
     }
   });
 
