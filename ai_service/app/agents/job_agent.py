@@ -4,8 +4,9 @@ Job Matching Agent.
 Fetches live job listings dynamically across global startup boards (Remotive, Arbeitnow)
 and user-configured target dream companies (Greenhouse, Lever, Ashby via ats_service).
 
-Scores and ranks job postings against candidate profile with strict Fresher/Senior filtering
-and target company boosting.
+Scores and ranks job postings against candidate profile using explicit deterministic filters
+(experience_level, target_roles, location_preference) passed directly from Node.js user DB model.
+Eliminates brittle text-guessing logic.
 """
 
 from __future__ import annotations
@@ -18,119 +19,79 @@ from app.services.ats_service import fetch_all_jobs
 
 logger = logging.getLogger("neera_ai_service.job_agent")
 
-SENIOR_TERMS = {
-    "senior",
-    "sr",
-    "lead",
-    "staff",
-    "principal",
-    "head",
-    "director",
-    "vp",
-    "manager",
-    "architect",
-}
-
-ENTRY_TERMS = {
-    "junior",
-    "jr",
-    "entry",
-    "associate",
-    "graduate",
-    "fresher",
-    "intern",
-    "trainee",
-    "apprentice",
-    "new grad",
-}
-
 
 def score_job_match(
     job: JobListing,
     primary_role: str,
     target_roles: list[str],
     skills: list[str],
-    years_experience: int = 0,
-    experience_level: str = "auto",
+    experience_level: str | None = None,
+    location_preference: str | None = None,
     target_companies: list[str] | None = None,
 ) -> tuple[int, str]:
     """
-    Score a job listing against candidate profile (0–100%).
-    Strictly filters out senior roles if the candidate is a fresher.
-    Boosts matches at candidate's target dream companies.
+    Score a job listing against candidate profile (0–100%) using explicit deterministic filters.
 
     Returns:
         (score, reason_text)
     """
     title_lower = job.title.lower()
-    role_lower = primary_role.lower()
+    location_lower = job.location.lower()
     company_lower = job.company.lower()
+    role_lower = primary_role.lower()
 
-    # Determine if candidate is a fresher
-    is_fresher = (
-        experience_level == "fresher"
-        or (
-            experience_level == "auto"
-            and (
-                years_experience == 0
-                or "fresher" in role_lower
-                or "junior" in role_lower
-                or "entry" in role_lower
-                or any("fresher" in r.lower() for r in target_roles)
-            )
-        )
-    )
+    # 1. Deterministic Experience Level Filtering
+    exp_norm = (experience_level or "").strip().lower()
+    is_fresher = "fresher" in exp_norm or "0-1" in exp_norm
+    is_senior = "senior" in exp_norm or "3+" in exp_norm or "lead" in exp_norm
 
-    is_senior_target = (
-        experience_level == "senior"
-        or (
-            experience_level == "auto"
-            and (
-                years_experience >= 3
-                or any(s in role_lower for s in ["senior", "lead", "staff", "principal"])
-            )
-        )
-    )
-
-    # 1. Seniority Filtering & Exclusion
-    has_senior_title = any(term in title_lower for term in SENIOR_TERMS)
-    has_entry_title = any(term in title_lower for term in ENTRY_TERMS)
+    has_senior_title = any(term in title_lower for term in ["senior", "sr", "lead", "staff", "principal", "head", "director", "vp", "manager", "architect"])
+    has_entry_title = any(term in title_lower for term in ["junior", "jr", "entry", "associate", "intern", "trainee", "fresher", "apprentice"])
 
     if is_fresher:
         if has_senior_title:
             return 0, "Requires Senior Experience (Excluded)"
         elif has_entry_title:
-            base_score = 75
+            score = 75
             reason = "Entry-Level / Fresher position"
         else:
-            base_score = 55
+            score = 55
             reason = "General Developer role"
-    elif is_senior_target:
+    elif is_senior:
         if has_senior_title:
-            base_score = 75
+            score = 75
             reason = "Senior level role"
         elif has_entry_title:
             return 25, "Entry level position (Below experience target)"
         else:
-            base_score = 50
+            score = 50
             reason = "Standard position"
     else:
-        base_score = 55
+        score = 55
         reason = "Matching role"
 
-    score = base_score
     reasons = [reason]
 
-    # 2. Target Dream Company Boost
+    # 2. Deterministic Location Matching
+    if location_preference:
+        loc_pref = location_preference.strip().lower()
+        if loc_pref in location_lower or (loc_pref == "remote" and "remote" in location_lower):
+            score += 15
+            reasons.append(f"📍 Location Match ({job.location})")
+        elif "remote" in location_lower:
+            score += 10
+            reasons.append(f"📍 Remote Position")
+
+    # 3. Target Dream Companies Boost
     if target_companies:
         for tc in target_companies:
             tc_clean = tc.strip().lower()
             if tc_clean and tc_clean in company_lower:
                 score += 20
-                reasons.append(f"🎯 Target Dream Company ({tc.title()})")
+                reasons.append(f"🎯 Dream Company ({tc.title()})")
                 break
 
-    # 3. Title & Target Role Matching
+    # 4. Target Roles & Skills Matching
     all_target_roles = [role_lower] + [r.lower() for r in target_roles]
     matched_role = None
     for tr in all_target_roles:
@@ -146,14 +107,14 @@ def score_job_match(
 
     if matched_role:
         score += 20
-        reasons.append(f"Matches target role '{matched_role.title()}'")
+        reasons.append(f"Role: {matched_role.title()}")
     elif any(
         term in title_lower
         for term in ["software", "engineer", "developer", "backend", "frontend", "fullstack", "data", "ai", "cloud"]
     ):
         score += 10
 
-    # 4. Skill matching
+    # 5. Skill keyword matching
     matched_skills = []
     for skill in skills:
         sk_lower = skill.lower()
@@ -173,63 +134,48 @@ def score_job_match(
 async def match_jobs_for_resume(
     resume_profile: dict[str, Any],
     company_slugs: list[str] | None = None,
-    experience_level_override: str | None = None,
+    experience_level: str | None = None,
+    target_roles: list[str] | None = None,
+    location_preference: str | None = None,
 ) -> dict[str, Any]:
     """
-    Fetch live jobs from target dream companies and global startup boards,
-    scoring and matching them against candidate's profile.
+    Fetch live jobs from target dream companies and global startup boards using deterministic DB preferences.
 
     Args:
         resume_profile: Dictionary representation of ResumeProfile
         company_slugs: Custom target company slugs specified by user
-        experience_level_override: Optional experience filter ("fresher" | "junior" | "senior")
+        experience_level: Explicit experience level ("Fresher", "1-3 Years", "Senior")
+        target_roles: Explicit target roles (e.g., ["Backend", "AI"])
+        location_preference: Explicit location preference (e.g., "Remote", "India")
 
     Returns:
-        Dict with total_found, matched_count, experience_level, target_companies, and formatted_html
+        Dict with total_found, matched_count, experience_level, location_preference, and formatted_html
     """
-    # Extract candidate target companies (either explicitly passed or from resume profile)
     target_companies = company_slugs or resume_profile.get("target_companies", [])
     if isinstance(target_companies, str):
         target_companies = [c.strip() for c in target_companies.split(",") if c.strip()]
 
     primary_role = str(resume_profile.get("primary_role", "Software Engineer"))
-    target_roles = [str(r) for r in resume_profile.get("target_roles", [])]
+    roles = target_roles or [str(r) for r in resume_profile.get("target_roles", [])]
     skills = [str(s) for s in resume_profile.get("skills", [])]
-    years_exp = int(resume_profile.get("years_experience", 0))
 
-    exp_level = experience_level_override or "auto"
-
-    is_fresher = (
-        exp_level == "fresher"
-        or (
-            exp_level == "auto"
-            and (
-                years_exp == 0
-                or "fresher" in primary_role.lower()
-                or "junior" in primary_role.lower()
-                or "entry" in primary_role.lower()
-                or any("fresher" in r.lower() for r in target_roles)
-            )
-        )
-    )
-
-    exp_label = "🎓 Fresher / Entry-Level (0–1 yrs)" if is_fresher else (
-        f"💼 Experienced ({years_exp}+ yrs)" if years_exp > 0 else "💻 Junior / Mid-Level (1–3 yrs)"
-    )
+    exp_label = experience_level or "Not specified"
+    loc_label = location_preference or "Any Location"
 
     logger.info(
-        "🔍 Job discovery initiated — role='%s', exp_level=%s, target_companies=%s",
+        "🔍 Deterministic job matching — role='%s', exp_level='%s', location='%s', target_roles=%s",
         primary_role,
         exp_label,
-        target_companies,
+        loc_label,
+        roles,
     )
 
-    # 1. Fetch live jobs dynamically (target companies + global startup job aggregators filtered by candidate profile)
+    # 1. Fetch live jobs dynamically (target companies + global startup job aggregators)
     all_jobs = await fetch_all_jobs(
         company_slugs=target_companies,
         include_global_startups=True,
         primary_role=primary_role,
-        target_roles=target_roles,
+        target_roles=roles,
         skills=skills,
     )
 
@@ -238,7 +184,8 @@ async def match_jobs_for_resume(
             "<b>💼 Dynamic Job Board Matcher</b>",
             "",
             f"<b>🎯 Role:</b> <code>{primary_role}</code>",
-            f"<b>{exp_label}</b>",
+            f"<b>📊 Experience:</b> <code>{exp_label}</code>",
+            f"<b>📍 Location:</b> <code>{loc_label}</code>",
             f"<b>🏢 Target Companies:</b> {', '.join(target_companies) if target_companies else 'All Global Startups & Tech'}",
             "",
             "⚠️ Job search engine is currently updating. Try <code>/jobs</code> again in a moment!",
@@ -247,21 +194,22 @@ async def match_jobs_for_resume(
             "total_found": 0,
             "matched_count": 0,
             "experience_level": exp_label,
+            "location_preference": loc_label,
             "target_companies": target_companies,
             "formatted_html": "\n".join(html),
             "jobs": [],
         }
 
-    # 2. Score and rank jobs
+    # 2. Score and rank jobs using deterministic filters
     scored_jobs = []
     for job in all_jobs:
         score, reason = score_job_match(
             job,
-            primary_role,
-            target_roles,
-            skills,
-            years_experience=years_exp,
-            experience_level=exp_level,
+            primary_role=primary_role,
+            target_roles=roles,
+            skills=skills,
+            experience_level=experience_level,
+            location_preference=location_preference,
             target_companies=target_companies,
         )
 
@@ -290,8 +238,9 @@ async def match_jobs_for_resume(
     html_lines = [
         "<b>💼 Live Matched Job Openings</b>",
         "",
-        f"<b>🎯 Role:</b> <code>{primary_role}</code>",
-        f"<b>{exp_label}</b>",
+        f"<b>🎯 Primary Role:</b> <code>{primary_role}</code>",
+        f"<b>📊 Experience Level:</b> <code>{exp_label}</code>",
+        f"<b>📍 Location Preference:</b> <code>{loc_label}</code>",
         f"<b>🏢 Target Companies:</b> {target_comp_str}",
         f"<b>🛠️ Top Skills:</b> {', '.join(skills[:5]) if skills else 'Software Engineering'}",
         f"<b>⚡ Live Discovered:</b> {len(all_jobs)} open postings across global startups & tech",
@@ -315,13 +264,13 @@ async def match_jobs_for_resume(
                 "",
             ])
 
-    html_lines.append("<i>💡 Chat with me anytime to add target companies or set up job alerts!</i>")
+    html_lines.append("<i>💡 Tap a button below to update your experience filter anytime!</i>")
 
     return {
         "total_found": len(all_jobs),
         "matched_count": len(top_matches),
         "experience_level": exp_label,
-        "is_fresher": is_fresher,
+        "location_preference": loc_label,
         "target_companies": target_companies,
         "formatted_html": "\n".join(html_lines),
         "jobs": top_matches,
@@ -348,7 +297,9 @@ async def run_job_agent(prompt: str, context: Any) -> Any:
         user_prefs = context.get("user_preferences", {})
 
     resume_profile = user_prefs.get("resumeJson") or user_prefs.get("resume_profile") or {}
-    exp_override = user_prefs.get("experience_level")
+    exp_level = user_prefs.get("experienceLevel") or user_prefs.get("experience_level")
+    target_roles = user_prefs.get("targetRoles") or user_prefs.get("target_roles")
+    loc_pref = user_prefs.get("locationPreference") or user_prefs.get("location_preference")
     target_comps = user_prefs.get("target_companies") or resume_profile.get("target_companies")
 
     if not resume_profile:
@@ -367,7 +318,9 @@ async def run_job_agent(prompt: str, context: Any) -> Any:
     match_res = await match_jobs_for_resume(
         resume_profile,
         company_slugs=target_comps,
-        experience_level_override=exp_override,
+        experience_level=exp_level,
+        target_roles=target_roles,
+        location_preference=loc_pref,
     )
     return AgentResult(
         content=match_res.get("formatted_html", ""),
@@ -375,6 +328,5 @@ async def run_job_agent(prompt: str, context: Any) -> Any:
         metadata={
             "total_found": match_res.get("total_found", 0),
             "matched_count": match_res.get("matched_count", 0),
-            "is_fresher": match_res.get("is_fresher", False),
         },
     )

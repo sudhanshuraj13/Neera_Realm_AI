@@ -1,5 +1,6 @@
 import type { Bot } from "grammy";
 import { getOrCreateUser, saveMessage, getRecentMessages } from "../../db/userRepository.js";
+import { prisma } from "../../db/client.js";
 import { sendSafeTelegramMessage } from "../../utils/telegram.js";
 import { processUserMessage } from "../../ai/orchestrator.js";
 import { formatFinancialSummary, formatChatResponse } from "../../utils/formatters.js";
@@ -15,14 +16,14 @@ const AI_SERVICE_ENABLED = Boolean(process.env["AI_SERVICE_URL"]?.trim());
 
 /**
  * Route a user message through the Python multi-agent microservice.
- * Returns the HTML response, or null if the service is unavailable (triggers fallback).
+ * Returns response object with replyText & intentDetected, or null if service is unavailable.
  */
 async function routeViaPythonService(
   userId: string,
   telegramId: bigint,
   prompt: string,
   userPreferences: Record<string, unknown>
-): Promise<string | null> {
+): Promise<{ replyText: string; intentDetected: string } | null> {
   try {
     // 1. Fetch calendar events from Google Calendar via Node.js OAuth layer
     const calendarEvents = await CalendarService.getUpcomingEvents(telegramId);
@@ -45,7 +46,10 @@ async function routeViaPythonService(
       `🐍 [AI Service] intent=${result.intent_detected}, agents=[${result.agents_executed.join(", ")}]`
     );
 
-    return result.reply_text;
+    return {
+      replyText: result.reply_text,
+      intentDetected: result.intent_detected,
+    };
   } catch (err) {
     if (isAiServiceError(err)) {
       console.warn(`⚠️ [AI Service] ${err.code}: ${err.message} — falling back to local orchestrator`);
@@ -77,6 +81,20 @@ export function registerMessageHandlers(bot: Bot): void {
       const userText = ctx.message.text;
       await saveMessage(user.id, "user", userText);
 
+      // Auto-detect and persist location preference if not already set
+      if (!user.locationPreference) {
+        const locMatch = userText.match(/\b(remote|india|us|usa|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|noida|san francisco|london|europe|canada|singapore)\b/i);
+        if (locMatch) {
+          const pref = locMatch[0].charAt(0).toUpperCase() + locMatch[0].slice(1).toLowerCase();
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { locationPreference: pref },
+          });
+          user.locationPreference = pref;
+          console.log(`📍 [LocationPreference] Persisted to DB for user ${user.id}: ${pref}`);
+        }
+      }
+
       let responseHtml: string;
 
       // ── Gateway Path: Python AI Microservice ──────────────────────
@@ -90,6 +108,18 @@ export function registerMessageHandlers(bot: Bot): void {
         if (user.resumeJson) {
           preferences["resumeJson"] = user.resumeJson;
         }
+        if (user.experienceLevel) {
+          preferences["experienceLevel"] = user.experienceLevel;
+          preferences["experience_level"] = user.experienceLevel;
+        }
+        if (user.targetRoles && user.targetRoles.length > 0) {
+          preferences["targetRoles"] = user.targetRoles;
+          preferences["target_roles"] = user.targetRoles;
+        }
+        if (user.locationPreference) {
+          preferences["locationPreference"] = user.locationPreference;
+          preferences["location_preference"] = user.locationPreference;
+        }
 
         const pythonResult = await routeViaPythonService(
           user.id,
@@ -99,9 +129,13 @@ export function registerMessageHandlers(bot: Bot): void {
         );
 
         if (pythonResult) {
-          responseHtml = pythonResult;
+          responseHtml = pythonResult.replyText;
           await sendSafeTelegramMessage(ctx, responseHtml);
           await saveMessage(user.id, "assistant", responseHtml);
+
+          if (pythonResult.intentDetected === "clarification") {
+            console.log(`❓ [HITL Clarification] Awaiting user location response...`);
+          }
           return;
         }
         // If Python service failed, fall through to local orchestrator
@@ -171,7 +205,7 @@ export function registerMessageHandlers(bot: Bot): void {
         );
 
         if (pythonResult) {
-          responseHtml = pythonResult;
+          responseHtml = pythonResult.replyText;
           await sendSafeTelegramMessage(ctx, responseHtml);
           await saveMessage(user.id, "assistant", responseHtml);
           return;

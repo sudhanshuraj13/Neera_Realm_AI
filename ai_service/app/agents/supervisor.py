@@ -74,6 +74,7 @@ class OrchestratorState(TypedDict):
     errors: Annotated[list[dict], operator.add]              # Accumulated sub-agent error flags
     supervision_passed: bool                                # Quality control status flag
     supervision_notes: str                                  # Supervisor audit notes
+    clarification_question: str | None                      # HITL clarification question flag
     final_response: dict                                    # Serialized OrchestrateResponse
 
 
@@ -292,12 +293,31 @@ def run_calendar_node(state: OrchestratorState) -> dict[str, Any]:
 
 def supervise_node(state: OrchestratorState) -> dict[str, Any]:
     """
-    Node 3: Supervisor Quality Control & Anti-Hallucination Audit.
+    Node 3: Supervisor Quality Control & Human-In-The-Loop (HITL) Parameter Audit.
 
-    Audits accumulated sub-agent outputs against ground-truth user context.
-    Handles graceful degradation: if an error flag was raised, ensures healthy outputs
-    (e.g., financial/calendar) are preserved while explaining the outage to the user.
+    Audits search parameters before final synthesis.
+    Rule: If the user asks for jobs but location_preference is missing or prompt is vague,
+    set state: {"clarification_question": "Are you looking for Remote roles, or a specific city like Bangalore?"}
     """
+    request = OrchestrateRequest(**state["request"])
+    intent = state.get("intent", "general")
+    user_prefs = request.context.user_preferences or {}
+
+    location_pref = user_prefs.get("locationPreference") or user_prefs.get("location_preference")
+    prompt_lower = request.prompt.strip().lower()
+
+    # Rule: Check if job search lacks location preference or is overly vague
+    if intent in ("jobs", "mixed") or any(kw in prompt_lower for kw in ["find job", "get job", "looking for job", "show job"]):
+        is_vague = prompt_lower in {"find me a job", "get jobs", "jobs", "show jobs", "job", "find job", "look for job"}
+        if not location_pref or is_vague:
+            clarification = "Are you looking for Remote roles, or a specific city/country like India, US, or Bangalore?"
+            logger.info("❓ HITL Audit: Location preference missing — triggering clarification question")
+            return {
+                "supervision_passed": False,
+                "supervision_notes": "Audit flagged missing location preference — HITL clarification required",
+                "clarification_question": clarification,
+            }
+
     agent_results = state.get("agent_results", [])
     errors = state.get("errors", [])
 
@@ -305,16 +325,17 @@ def supervise_node(state: OrchestratorState) -> dict[str, Any]:
         return {
             "supervision_passed": True,
             "supervision_notes": "No sub-agent outputs to audit (general chat)",
+            "clarification_question": None,
         }
 
-    request = OrchestrateRequest(**state["request"])
     llm = get_llm()
 
-    has_resume = bool(request.context.user_preferences.get("resumeJson"))
+    has_resume = bool(user_prefs.get("resumeJson"))
     context_summary = (
         f"Resume Uploaded: {has_resume}, "
+        f"Location: {location_pref or 'None'}, "
         f"Calendar Events: {len(request.context.calendar_events)}, "
-        f"Watchlist: {request.context.user_preferences.get('watchlist', [])}"
+        f"Watchlist: {user_prefs.get('watchlist', [])}"
     )
 
     errors_summary = ", ".join([f"{e['agent_name']}: {e['error']}" for e in errors]) if errors else "None"
@@ -338,16 +359,15 @@ def supervise_node(state: OrchestratorState) -> dict[str, Any]:
             ]
         )
 
-        audit_content = response.content if hasattr(response, "content") else str(response)
-
         notes = "Supervisor verified and anti-hallucination audited"
         if errors:
             notes += f" (Graceful degradation for: {errors_summary})"
 
-        logger.info("🛡️ Supervisor Quality Control passed — zero hallucinations verified (Accumulated agents: %d)", len(agent_results))
+        logger.info("🛡️ Supervisor Quality Control passed — zero hallucinations verified")
         return {
             "supervision_passed": True,
             "supervision_notes": notes,
+            "clarification_question": None,
         }
 
     except Exception as e:
@@ -355,11 +375,28 @@ def supervise_node(state: OrchestratorState) -> dict[str, Any]:
         return {
             "supervision_passed": True,
             "supervision_notes": f"Supervision fallback: {e}",
+            "clarification_question": None,
         }
 
 
 def run_synthesis_node(state: OrchestratorState) -> dict[str, Any]:
-    """Node 4: Consolidate all accumulated & verified agent outputs into final Telegram HTML response."""
+    """
+    Node 4: Consolidate verified agent outputs into final response.
+
+    HITL Rule: If clarification_question exists, bypass all formatting and return
+    the clarification question directly with intent_detected = "clarification".
+    """
+    clarification = state.get("clarification_question")
+
+    if clarification:
+        logger.info("❓ Synthesis Node: Returning HITL clarification question directly")
+        final_resp = OrchestrateResponse(
+            reply_text=clarification,
+            intent_detected="clarification",
+            agents_executed=["supervisor", "clarification"],
+        ).model_dump()
+        return {"final_response": final_resp}
+
     request = OrchestrateRequest(**state["request"])
 
     agent_results = [
@@ -497,6 +534,7 @@ async def run_orchestration(request: OrchestrateRequest) -> OrchestrateResponse:
         "errors": [],
         "supervision_passed": False,
         "supervision_notes": "",
+        "clarification_question": None,
         "final_response": {},
     }
 

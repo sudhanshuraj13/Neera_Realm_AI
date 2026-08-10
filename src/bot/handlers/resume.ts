@@ -128,36 +128,44 @@ export function registerResumeHandlers(bot: Bot): void {
       // Refresh typing indicator for the LLM call
       await ctx.replyWithChatAction("typing");
 
-      // 4. Send to Python FastAPI for LLM-powered structured extraction
+      // 4. Send to Python FastAPI for raw skill/project extraction
       const result = await parseResume(user.id, rawText);
+      const profile = (result.profile as Record<string, unknown>) || {};
+      const extractedTargetRoles = Array.isArray(profile["target_roles"])
+        ? (profile["target_roles"] as string[])
+        : [];
 
-      // 5. Save the structured profile to the database
-      // Cast through JSON serialization to satisfy Prisma's InputJsonValue type
+      // 5. Save raw extracted profile + targetRoles to DB
       await prisma.user.update({
         where: { id: user.id },
-        data: { resumeJson: JSON.parse(JSON.stringify(result.profile)) as object },
+        data: {
+          resumeJson: JSON.parse(JSON.stringify(result.profile)) as object,
+          targetRoles: extractedTargetRoles,
+        },
       });
 
-      // 6. Reply with success
-      const jobKeyboard = new InlineKeyboard().text(
-        "💼 View Matching Jobs",
-        "action:fetch_jobs"
-      );
+      // 6. Step B: IMMEDIATELY follow up with Deterministic Experience Level Selection Keyboard
+      const expKeyboard = new InlineKeyboard()
+        .text("🎓 Fresher (0-1 yrs)", "action:set_exp:Fresher")
+        .text("💻 Junior (1-3 yrs)", "action:set_exp:1-3 Years")
+        .row()
+        .text("🚀 Senior (3+ yrs)", "action:set_exp:Senior");
 
       await sendSafeTelegramMessage(
         ctx,
         [
-          "✅ <b>Resume processed successfully!</b>",
+          "✅ <b>Resume skills & projects extracted!</b>",
           "",
-          "Your high-fidelity career profile has been saved.",
+          "<b>Step 2/2: Experience Level Setup</b>",
+          "What is your exact professional experience level?",
           "",
-          "👉 Type <code>/jobs</code> or tap the button below to view live job matches from top tech companies!",
+          "<i>Tap a button below to save your experience preference:</i>",
         ].join("\n"),
-        { reply_markup: jobKeyboard }
+        { reply_markup: expKeyboard }
       );
 
       console.log(
-        `📄 [Resume] Processed for user ${user.id} (${from.first_name}) — ${rawText.length} chars extracted`
+        `📄 [Resume] Extracted for user ${user.id} (${from.first_name}) — ${rawText.length} chars`
       );
     } catch (err) {
       if (isAiServiceError(err)) {
@@ -176,6 +184,50 @@ export function registerResumeHandlers(bot: Bot): void {
     }
   });
 
+  // Callback query handler for Deterministic Experience Level Selection (Step C)
+  bot.callbackQuery(/^action:set_exp:(Fresher|1-3 Years|Senior)$/, async (ctx) => {
+    const level = ctx.match[1];
+    await ctx.answerCallbackQuery({ text: `Experience set to ${level}` });
+    const from = ctx.from;
+    if (!from) return;
+
+    try {
+      const user = await getOrCreateUser(
+        BigInt(from.id),
+        from.first_name,
+        from.username
+      );
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { experienceLevel: level },
+      });
+
+      const jobKeyboard = new InlineKeyboard().text("💼 View Matching Jobs", "action:fetch_jobs");
+
+      await sendSafeTelegramMessage(
+        ctx,
+        [
+          "🎉 <b>Career Profile Setup Complete!</b>",
+          "",
+          `<b>Experience Level:</b> <code>${level}</code>`,
+          user.targetRoles.length > 0
+            ? `<b>Target Roles:</b> ${user.targetRoles.map((r) => `<code>${r}</code>`).join(", ")}`
+            : "",
+          "",
+          "Your deterministic profile is saved in Neon DB. Type <code>/jobs</code> or tap below to search matching postings!",
+        ].filter(Boolean).join("\n"),
+        { reply_markup: jobKeyboard }
+      );
+    } catch (err) {
+      console.error("❌ Set experience action error:", err);
+      await sendSafeTelegramMessage(
+        ctx,
+        "⚠️ Could not save experience level. Please try again."
+      );
+    }
+  });
+
   // /jobs or /job command — fetches live ATS job postings matching the candidate's stored resume profile
   bot.command(["jobs", "job"], async (ctx) => {
     const from = ctx.from;
@@ -190,7 +242,6 @@ export function registerResumeHandlers(bot: Bot): void {
         from.username
       );
 
-      // Guard: check if user has uploaded a resume
       if (!user.resumeJson) {
         const uploadKeyboard = new InlineKeyboard().text(
           "📄 Upload Resume",
@@ -204,8 +255,6 @@ export function registerResumeHandlers(bot: Bot): void {
             "",
             "You haven't uploaded a resume yet!",
             "",
-            "To get personalized, live job matches from top tech companies (Stripe, OpenAI, Vercel, Notion, etc.):",
-            "",
             "👉 Please upload your resume as a <b>PDF file</b> using <code>/resume</code> or tap the button below.",
           ].join("\n"),
           { reply_markup: uploadKeyboard }
@@ -213,10 +262,14 @@ export function registerResumeHandlers(bot: Bot): void {
         return;
       }
 
-      // Candidate has a stored resume profile! Fetch matching live jobs
+      // Candidate has a stored resume profile! Fetch matching live jobs with deterministic DB filters
       const result = await matchJobs(
         user.id,
-        user.resumeJson as Record<string, unknown>
+        user.resumeJson as Record<string, unknown>,
+        undefined,
+        user.experienceLevel ?? undefined,
+        user.targetRoles,
+        user.locationPreference ?? undefined
       );
 
       const expFilterKeyboard = new InlineKeyboard()
@@ -271,7 +324,11 @@ export function registerResumeHandlers(bot: Bot): void {
 
       const result = await matchJobs(
         user.id,
-        user.resumeJson as Record<string, unknown>
+        user.resumeJson as Record<string, unknown>,
+        undefined,
+        user.experienceLevel ?? undefined,
+        user.targetRoles,
+        user.locationPreference ?? undefined
       );
 
       const expFilterKeyboard = new InlineKeyboard()
