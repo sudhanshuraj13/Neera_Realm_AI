@@ -37,6 +37,7 @@ model User {
 
   preference UserPreference?
   messages   Message[]
+  fundingAlerts UserFundingAlert[]
 
   @@map("users")
 }
@@ -72,4 +73,33 @@ model Message {
 
   @@index([userId, createdAt])
   @@map("messages")
+}
+
+model FundedStartup {
+  id           String   @id @default(cuid())
+  companyName  String
+  amountRaised String
+  fundingStage String
+  domain       String
+  summary      String   @db.Text
+  careersUrl   String?
+  sourceUrl    String   @unique
+  createdAt    DateTime @default(now())
+
+  sentAlerts UserFundingAlert[]
+
+  @@map("funded_startups")
+}
+
+model UserFundingAlert {
+  id        String   @id @default(uuid())
+  userId    String
+  startupId String
+  sentAt    DateTime @default(now())
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startup FundedStartup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, startupId])
+  @@map("user_funding_alerts")
 }

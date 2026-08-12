@@ -13,7 +13,11 @@ import { InlineKeyboard } from "grammy";
 import axios from "axios";
 import { PDFParse } from "pdf-parse";
 import { config } from "../../config/index.js";
-import { getOrCreateUser } from "../../db/userRepository.js";
+import {
+  getOrCreateUser,
+  getSentFundingAlertIds,
+  recordSentFundingAlerts,
+} from "../../db/userRepository.js";
 import { prisma } from "../../db/client.js";
 import { sendSafeTelegramMessage } from "../../utils/telegram.js";
 import {
@@ -417,6 +421,7 @@ export function registerResumeHandlers(bot: Bot): void {
       }
 
       // Candidate has a stored resume profile! Fetch matching live jobs with deterministic DB filters
+      const sentStartupIds = await getSentFundingAlertIds(user.id);
       const result = await matchJobs(
         user.id,
         user.resumeJson as Record<string, unknown>,
@@ -424,8 +429,13 @@ export function registerResumeHandlers(bot: Bot): void {
         user.experienceLevel ?? undefined,
         user.targetRoles,
         user.locationPreference ?? undefined,
-        user.primaryRole ?? undefined
+        user.primaryRole ?? undefined,
+        sentStartupIds
       );
+
+      if (result.sent_startup_ids && result.sent_startup_ids.length > 0) {
+        await recordSentFundingAlerts(user.id, result.sent_startup_ids);
+      }
 
       const expFilterKeyboard = new InlineKeyboard()
         .text("🎓 Fresher (0–1 yrs)", "action:exp_filter:fresher")
@@ -477,6 +487,7 @@ export function registerResumeHandlers(bot: Bot): void {
         return;
       }
 
+      const sentStartupIds = await getSentFundingAlertIds(user.id);
       const result = await matchJobs(
         user.id,
         user.resumeJson as Record<string, unknown>,
@@ -484,8 +495,13 @@ export function registerResumeHandlers(bot: Bot): void {
         user.experienceLevel ?? undefined,
         user.targetRoles,
         user.locationPreference ?? undefined,
-        user.primaryRole ?? undefined
+        user.primaryRole ?? undefined,
+        sentStartupIds
       );
+
+      if (result.sent_startup_ids && result.sent_startup_ids.length > 0) {
+        await recordSentFundingAlerts(user.id, result.sent_startup_ids);
+      }
 
       const expFilterKeyboard = new InlineKeyboard()
         .text("🎓 Fresher (0–1 yrs)", "action:exp_filter:fresher")
@@ -539,6 +555,7 @@ export function registerResumeHandlers(bot: Bot): void {
         return;
       }
 
+      const sentStartupIds = await getSentFundingAlertIds(user.id);
       const result = await matchJobs(
         user.id,
         user.resumeJson as Record<string, unknown>,
@@ -546,8 +563,13 @@ export function registerResumeHandlers(bot: Bot): void {
         level,
         user.targetRoles,
         user.locationPreference ?? undefined,
-        user.primaryRole ?? undefined
+        user.primaryRole ?? undefined,
+        sentStartupIds
       );
+
+      if (result.sent_startup_ids && result.sent_startup_ids.length > 0) {
+        await recordSentFundingAlerts(user.id, result.sent_startup_ids);
+      }
 
       const expFilterKeyboard = new InlineKeyboard()
         .text(level === "fresher" ? "✅ Fresher (0–1 yrs)" : "🎓 Fresher (0–1 yrs)", "action:exp_filter:fresher")

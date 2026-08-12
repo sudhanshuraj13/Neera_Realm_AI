@@ -89,6 +89,38 @@ export async function getUsersForBriefing(
   );
 }
 
+/** Fetch all startup IDs previously sent to a user for deduplication. */
+export async function getSentFundingAlertIds(userId: string): Promise<string[]> {
+  const alerts = await prisma.userFundingAlert.findMany({
+    where: { userId },
+    select: { startupId: true },
+  });
+  return alerts.map((a) => a.startupId);
+}
+
+/** Record delivered startup funding alert IDs for a user to prevent duplicate notifications. */
+export async function recordSentFundingAlerts(
+  userId: string,
+  startupIds: string[]
+): Promise<void> {
+  if (!startupIds || startupIds.length === 0) return;
+
+  await prisma.$transaction(
+    startupIds.map((startupId) =>
+      prisma.userFundingAlert.upsert({
+        where: {
+          userId_startupId: { userId, startupId },
+        },
+        update: {},
+        create: {
+          userId,
+          startupId,
+        },
+      })
+    )
+  );
+}
+
 /** Fetch a user along with their preferences by user ID. */
 export async function getUserWithPreference(
   userId: string

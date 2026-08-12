@@ -15,5 +15,6 @@ langchain-groq
 langchain-google-genai
 langchain-openai
 
-# HTTP client (for potential external API calls)
+# HTTP & RSS clients
 httpx>=0.27.0
+feedparser>=6.0.0

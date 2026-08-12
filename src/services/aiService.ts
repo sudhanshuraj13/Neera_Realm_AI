@@ -174,6 +174,7 @@ export interface JobMatchResponse {
   experience_level?: string;
   is_fresher?: boolean;
   jobs: Array<Record<string, unknown>>;
+  sent_startup_ids?: string[];
 }
 
 /**
@@ -191,7 +192,8 @@ export async function matchJobs(
   experienceLevel?: string,
   targetRoles?: string[],
   locationPreference?: string,
-  primaryRole?: string
+  primaryRole?: string,
+  excludeStartupIds?: string[]
 ): Promise<JobMatchResponse> {
   const { data } = await aiClient.post<JobMatchResponse>(
     "/api/v1/jobs/match",
@@ -203,6 +205,7 @@ export async function matchJobs(
       target_roles: targetRoles,
       location_preference: locationPreference,
       primary_role: primaryRole,
+      exclude_startup_ids: excludeStartupIds,
     }
   );
   return data;

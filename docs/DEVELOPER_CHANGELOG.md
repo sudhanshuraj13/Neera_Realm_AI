@@ -8,6 +8,33 @@ This log is structured for vibe coding. Each update is documented using four sta
 
 ---
 
+## [2026-08-13] — Feature: Startup Funding Radar & Automated Ingestion in Job Agent
+
+### 1. Real-Time Funding RSS Ingestion & Per-User Deduplication
+* **The Vibe (What & Why):**
+  * *Analogy:* Like having a dedicated tech insider reading TechCrunch 24/7 to alert you the instant a startup in your domain closes a massive funding round, giving you direct founder outreach links before job boards list the roles.
+  * *Technical:* Implemented the Startup Funding Radar feature strictly within the Job/Career Agent (`jobs_node`). Built an async RSS parsing service (`funding_service.py`) targeting TechCrunch Startups RSS (`https://techcrunch.com/category/startups/feed/`), filtering articles from the last 48 hours and extracting structured `FundedStartup` objects (`companyName`, `amountRaised`, `fundingStage`, `domain`, `summary`, `careersUrl`, `sourceUrl`). Extended Prisma schema with `FundedStartup` and `UserFundingAlert` models to maintain strict per-user deduplication in Neon DB (`sent_startup_ids`).
+* **The Prompt (How to talk to the AI):**
+  * "PROMPT: IMPLEMENT STARTUP FUNDING RADAR IN JOB AGENT: Act as a Principal Backend Architect. We are adding a 'Startup Funding Radar' feature to Neera Realm AI. This feature must be owned by the Job/Career Agent (jobs_node), NOT the Financial Agent..."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* `feedparser>=6.0.0` (pip).
+  * *DB Changes:* Added `FundedStartup` and `UserFundingAlert` models to `prisma/schema.prisma` with relational tracking on `User.fundingAlerts` and pushed schema to Neon DB.
+* **The Snippet (Core Code):**
+  ```python
+  # Async TechCrunch Funding RSS Extraction & Role Matching
+  funding_items = await fetch_recent_funded_startups(hours=48)
+  unseen = [item for item in funding_items if item.id not in exclude_ids]
+  top_funding = [item for item in unseen if any(term in f"{item.company_name} {item.domain} {item.summary}".lower() for term in candidate_terms)]
+  ```
+* **The Verification (How to test):**
+  * *DB Migration:* Ran `npx prisma db push` to generate `funded_startups` and `user_funding_alerts` tables.
+  * *Standalone Python Test:* Verified `fetch_recent_funded_startups(hours=48)` parsed 6 live TechCrunch funding events.
+  * *Deduplication Verification:* Tested consecutive runs of `match_jobs_for_resume` with `exclude_startup_ids`, confirming 0 duplicate funding alerts delivered to the user.
+  * *TypeScript Compilation:* `npx tsc --noEmit` passed with 0 errors.
+
+---
+
 ## [2026-08-12] — Feature: Wellfound-Style Stateful Onboarding Flow & Strict Primary Role Determinism
 
 ### 1. Persistent User Career Profile & Interactive Role Confirmation

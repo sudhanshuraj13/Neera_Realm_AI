@@ -16,6 +16,7 @@ from typing import Any
 
 from app.schemas.job_listing import JobListing
 from app.services.ats_service import fetch_all_jobs
+from app.services.funding_service import fetch_recent_funded_startups
 
 logger = logging.getLogger("neera_ai_service.job_agent")
 
@@ -133,9 +134,11 @@ async def match_jobs_for_resume(
     target_roles: list[str] | None = None,
     location_preference: str | None = None,
     primary_role: str | None = None,
+    exclude_startup_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Fetch live jobs from target dream companies and global job boards using deterministic DB preferences.
+    Includes Startup Funding Radar integration for high-growth funding alerts.
 
     Args:
         resume_profile: Dictionary representation of ResumeProfile
@@ -144,6 +147,7 @@ async def match_jobs_for_resume(
         target_roles: Explicit target roles (e.g., ["Product Designer", "UX Researcher"])
         location_preference: Explicit location preference (e.g., "Remote", "India")
         primary_role: Confirmed primary role title from database
+        exclude_startup_ids: IDs of startups already notified to user
 
     Returns:
         Dict with total_found, matched_count, experience_level, location_preference, and formatted_html
@@ -180,7 +184,7 @@ async def match_jobs_for_resume(
         html = [
             "<b>💼 Dynamic Job Board Matcher</b>",
             "",
-            f"<b>🎯 Role:</b> <code>{primary_role}</code>",
+            f"<b>🎯 Role:</b> <code>{p_role}</code>",
             f"<b>📊 Experience:</b> <code>{exp_label}</code>",
             f"<b>📍 Location:</b> <code>{loc_label}</code>",
             f"<b>🏢 Target Companies:</b> {', '.join(target_companies) if target_companies else 'All Global Companies & Job Boards'}",
@@ -195,6 +199,7 @@ async def match_jobs_for_resume(
             "target_companies": target_companies,
             "formatted_html": "\n".join(html),
             "jobs": [],
+            "sent_startup_ids": [],
         }
 
     # 2. Score and rank jobs using deterministic filters
@@ -202,7 +207,7 @@ async def match_jobs_for_resume(
     for job in all_jobs:
         score, reason = score_job_match(
             job,
-            primary_role=primary_role,
+            primary_role=p_role,
             target_roles=roles,
             skills=skills,
             experience_level=experience_level,
@@ -235,7 +240,7 @@ async def match_jobs_for_resume(
     html_lines = [
         "<b>💼 Live Matched Job Openings</b>",
         "",
-        f"<b>🎯 Primary Role:</b> <code>{primary_role}</code>",
+        f"<b>🎯 Primary Role:</b> <code>{p_role}</code>",
         f"<b>📊 Experience Level:</b> <code>{exp_label}</code>",
         f"<b>📍 Location Preference:</b> <code>{loc_label}</code>",
         f"<b>🏢 Target Companies:</b> {target_comp_str}",
@@ -261,6 +266,36 @@ async def match_jobs_for_resume(
                 "",
             ])
 
+    # 4. Startup Funding Radar Section (Deduplicated)
+    exclude_ids = set(exclude_startup_ids or [])
+    funding_items = await fetch_recent_funded_startups(hours=48)
+    unseen_funding = [item for item in funding_items if item.id not in exclude_ids and item.source_url not in exclude_ids]
+
+    sent_startup_ids: list[str] = []
+    if unseen_funding:
+        candidate_terms = [p_role.lower()] + [r.lower() for r in roles] + [s.lower() for s in skills[:6]]
+        matched_funding = []
+        for item in unseen_funding:
+            item_text = f"{item.company_name} {item.domain} {item.summary}".lower()
+            if any(term in item_text for term in candidate_terms if len(term) > 2):
+                matched_funding.append(item)
+
+        top_funding = matched_funding[:2] if matched_funding else unseen_funding[:2]
+        sent_startup_ids = [f.id for f in top_funding]
+
+        if top_funding:
+            html_lines.append("<b>💰 High-Growth Funding Radar Alert</b>")
+            html_lines.append("<i>Recent startup funding events matching your domain:</i>")
+            html_lines.append("")
+            for f_item in top_funding:
+                html_lines.extend([
+                    f"🚀 <b>{f_item.company_name}</b> ({f_item.funding_stage} — <b>{f_item.amount_raised}</b>)",
+                    f"   • <b>Domain:</b> {f_item.domain}",
+                    f"   • <b>Radar:</b> {f_item.summary}",
+                    f"   • 🌐 <a href='{f_item.source_url}'><b>Founder News & Careers</b></a>",
+                    "",
+                ])
+
     html_lines.append("<i>💡 Tap a button below to update your experience filter anytime!</i>")
 
     return {
@@ -271,6 +306,7 @@ async def match_jobs_for_resume(
         "target_companies": target_companies,
         "formatted_html": "\n".join(html_lines),
         "jobs": top_matches,
+        "sent_startup_ids": sent_startup_ids,
     }
 
 

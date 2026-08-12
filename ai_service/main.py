@@ -222,6 +222,7 @@ async def jobs_match(payload: dict):
     target_roles = payload.get("target_roles")
     location_preference = payload.get("location_preference")
     primary_role = payload.get("primary_role")
+    exclude_startup_ids = payload.get("exclude_startup_ids") or payload.get("exclude_ids")
 
     logger.info(
         "💼 Job match request — user_id=%s, role='%s', exp_level=%s, location=%s",
@@ -239,6 +240,7 @@ async def jobs_match(payload: dict):
             target_roles=target_roles,
             location_preference=location_preference,
             primary_role=primary_role,
+            exclude_startup_ids=exclude_startup_ids,
         )
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
