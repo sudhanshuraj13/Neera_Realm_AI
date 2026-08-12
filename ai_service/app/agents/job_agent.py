@@ -15,14 +15,16 @@ import logging
 from typing import Any
 
 from app.schemas.job_listing import JobListing
+from app.schemas.jobs import UnifiedJob
 from app.services.ats_service import fetch_all_jobs
 from app.services.funding_service import fetch_recent_funded_startups
+from app.services.job_orchestrator import fetch_all_jobs_concurrently
 
 logger = logging.getLogger("neera_ai_service.job_agent")
 
 
 def score_job_match(
-    job: JobListing,
+    job: JobListing | UnifiedJob,
     primary_role: str,
     target_roles: list[str],
     skills: list[str],
@@ -51,80 +53,49 @@ def score_job_match(
 
     if is_fresher:
         if has_senior_title:
-            return 0, "Requires Senior Experience (Excluded)"
-        elif has_entry_title:
-            score = 75
-            reason = "Entry-Level / Fresher position"
-        else:
-            score = 55
-            reason = "General Developer role"
+            return -1, "Exceeds experience requirement (Senior title)"
+        score = 85 if has_entry_title else 70
+        reason = "Fresher friendly role"
     elif is_senior:
-        if has_senior_title:
-            score = 75
-            reason = "Senior level role"
-        elif has_entry_title:
-            return 25, "Entry level position (Below experience target)"
-        else:
-            score = 50
-            reason = "Standard position"
+        if has_entry_title:
+            return -1, "Below experience target (Junior title)"
+        score = 85 if has_senior_title else 70
+        reason = "Senior level role"
     else:
-        score = 55
-        reason = "Matching role"
+        score = 75
+        reason = "Mid-level role"
 
-    reasons = [reason]
-
-    # 2. Deterministic Location Matching
-    if location_preference:
-        loc_pref = location_preference.strip().lower()
-        if loc_pref in location_lower or (loc_pref == "remote" and "remote" in location_lower):
-            score += 15
-            reasons.append(f"📍 Location Match ({job.location})")
-        elif "remote" in location_lower:
-            score += 10
-            reasons.append(f"📍 Remote Position")
-
-    # 3. Target Dream Companies Boost
-    if target_companies:
-        for tc in target_companies:
-            tc_clean = tc.strip().lower()
-            if tc_clean and tc_clean in company_lower:
-                score += 20
-                reasons.append(f"🎯 Dream Company ({tc.title()})")
-                break
-
-    # 4. Target Roles & Skills Matching
-    all_target_roles = [role_lower] + [r.lower() for r in target_roles]
-    matched_role = None
-    for tr in all_target_roles:
-        words = [
-            w
-            for w in tr.split()
-            if len(w) > 2
-            and w not in {"fresher", "junior", "senior", "developer", "engineer", "software"}
-        ]
+    # 2. Primary Role & Target Roles Match
+    role_matched = False
+    all_roles = [role_lower] + [r.lower() for r in target_roles]
+    for r in all_roles:
+        words = [w for w in r.split() if len(w) > 2 and w not in {"engineer", "developer", "software", "fresher", "junior", "senior"}]
         if words and any(w in title_lower for w in words):
-            matched_role = tr
+            score += 15
+            role_matched = True
+            reason += f" • Role match ({r.title()})"
             break
 
-    if matched_role:
-        score += 20
-        reasons.append(f"Role: {matched_role.title()}")
+    if not role_matched and not any(term in title_lower for term in role_lower.split() if len(term) > 2):
+        score -= 10
 
-    # 5. Skill keyword matching
-    matched_skills = []
-    for skill in skills:
-        sk_lower = skill.lower()
-        if len(sk_lower) > 2 and sk_lower in title_lower:
-            matched_skills.append(skill)
+    # 3. Target Companies Boost
+    if target_companies:
+        for c in target_companies:
+            if c.lower() in company_lower:
+                score += 20
+                reason += f" • Dream Company ({c.title()})"
+                break
 
-    if matched_skills:
-        score += min(15, len(matched_skills) * 5)
-        reasons.append(f"Skills: {', '.join(matched_skills)}")
+    # 4. Location Boost
+    if location_preference:
+        loc_pref = location_preference.lower()
+        if loc_pref in location_lower or (loc_pref == "remote" and "remote" in location_lower):
+            score += 10
+            reason += " • Location preference match"
 
-    final_score = max(10, min(98, score))
-    reason_text = " • ".join(reasons)
-
-    return final_score, reason_text
+    final_score = min(99, max(10, score))
+    return final_score, reason
 
 
 async def match_jobs_for_resume(
@@ -137,20 +108,8 @@ async def match_jobs_for_resume(
     exclude_startup_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """
-    Fetch live jobs from target dream companies and global job boards using deterministic DB preferences.
+    Fetch live jobs concurrently across multi-source job search adapters (ATS, JobSpy, Adzuna).
     Includes Startup Funding Radar integration for high-growth funding alerts.
-
-    Args:
-        resume_profile: Dictionary representation of ResumeProfile
-        company_slugs: Custom target company slugs specified by user
-        experience_level: Explicit experience level ("Fresher", "1-3 Years", "Senior")
-        target_roles: Explicit target roles (e.g., ["Product Designer", "UX Researcher"])
-        location_preference: Explicit location preference (e.g., "Remote", "India")
-        primary_role: Confirmed primary role title from database
-        exclude_startup_ids: IDs of startups already notified to user
-
-    Returns:
-        Dict with total_found, matched_count, experience_level, location_preference, and formatted_html
     """
     target_companies = company_slugs or resume_profile.get("target_companies", [])
     if isinstance(target_companies, str):
@@ -163,26 +122,29 @@ async def match_jobs_for_resume(
     exp_label = experience_level or "Not specified"
     loc_label = location_preference or "Any Location"
 
+    user_context = {
+        "primary_role": p_role,
+        "target_roles": roles,
+        "skills": skills,
+        "experience_level": exp_label,
+        "location_preference": loc_label,
+        "target_companies": target_companies,
+    }
+
     logger.info(
-        "🔍 Deterministic job matching — role='%s', exp_level='%s', location='%s', target_roles=%s",
+        "🔍 Multi-adapter job search — role='%s', exp_level='%s', location='%s', target_roles=%s",
         p_role,
         exp_label,
         loc_label,
         roles,
     )
 
-    # 1. Fetch live jobs dynamically (target companies + global job aggregators)
-    all_jobs = await fetch_all_jobs(
-        company_slugs=target_companies,
-        include_global_startups=True,
-        primary_role=p_role,
-        target_roles=roles,
-        skills=skills,
-    )
+    # 1. Fetch live jobs concurrently across all registered adapters
+    all_jobs = await fetch_all_jobs_concurrently(user_context)
 
     if not all_jobs:
         html = [
-            "<b>💼 Dynamic Job Board Matcher</b>",
+            "<b>💼 Multi-Source Job Search Engine</b>",
             "",
             f"<b>🎯 Role:</b> <code>{p_role}</code>",
             f"<b>📊 Experience:</b> <code>{exp_label}</code>",
@@ -224,6 +186,7 @@ async def match_jobs_for_resume(
                 "title": job.title,
                 "location": job.location,
                 "apply_url": job.apply_url,
+                "source": job.source,
                 "score": score,
                 "reason": reason,
             }
@@ -238,14 +201,14 @@ async def match_jobs_for_resume(
     target_comp_str = ", ".join([c.title() for c in target_companies]) if target_companies else "Open (Tell bot e.g. 'Add Google to target companies')"
 
     html_lines = [
-        "<b>💼 Live Matched Job Openings</b>",
+        "<b>💼 Live Matched Job Openings (Multi-Source Engine)</b>",
         "",
         f"<b>🎯 Primary Role:</b> <code>{p_role}</code>",
         f"<b>📊 Experience Level:</b> <code>{exp_label}</code>",
         f"<b>📍 Location Preference:</b> <code>{loc_label}</code>",
         f"<b>🏢 Target Companies:</b> {target_comp_str}",
         f"<b>🛠️ Top Skills:</b> {', '.join(skills[:5]) if skills else 'Professional Skills'}",
-        f"<b>⚡ Live Discovered:</b> {len(all_jobs)} open postings across global job boards",
+        f"<b>⚡ Live Discovered:</b> {len(all_jobs)} open postings across ATS, LinkedIn & Job Boards",
         "",
     ]
 
@@ -257,8 +220,9 @@ async def match_jobs_for_resume(
         ])
     else:
         for idx, item in enumerate(top_matches, start=1):
+            source_badge = f" [<code>{item['source']}</code>]" if item.get("source") else ""
             html_lines.extend([
-                f"{idx}. <b>{item['title']}</b>",
+                f"{idx}. <b>{item['title']}</b>{source_badge}",
                 f"   🏢 <b>Company:</b> {item['company']}",
                 f"   📍 <b>Location:</b> {item['location']}",
                 f"   🔥 <b>Match:</b> {item['score']}% ({item['reason']})",

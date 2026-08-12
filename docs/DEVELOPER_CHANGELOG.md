@@ -8,6 +8,32 @@ This log is structured for vibe coding. Each update is documented using four sta
 
 ---
 
+## [2026-08-13] — Architecture: Unified Job Orchestrator & Multi-Source Adapter Pattern
+
+### 1. Concurrent Multi-Source Job Search & Defensive Adapter Isolation
+* **The Vibe (What & Why):**
+  * *Analogy:* Like upgrading from a single travel agency booking system to an automated travel aggregator (like Kayak or Skyscanner) that checks airlines, hotels, and train networks concurrently, showing you all options in one unified list without waiting for a slow provider.
+  * *Technical:* Refactored the job search architecture in `jobs_node` to use the **Adapter Pattern** and `asyncio.gather`. Defined `UnifiedJob` Pydantic model (`id`, `company`, `title`, `location`, `apply_url`, `source`, `posted_at`). Built modular adapters (`ATSJobAdapter`, `JobSpyAdapter`, `AdzunaJobAdapter`) under `app/services/job_adapters/`. Implemented `fetch_all_jobs_concurrently` in `job_orchestrator.py` to execute all adapters concurrently with strict timeouts (e.g. 6.0s limit for JobSpy inside `asyncio.to_thread`) and defensive exception swallowing. Deduplicated jobs by normalized `(company, title)` key and tagged matches with source badges (`[ATS]`, `[JobSpy]`, `[Adzuna]`).
+* **The Prompt (How to talk to the AI):**
+  * "PROMPT: PHASE 5 - UNIFIED JOB ORCHESTRATOR & ADAPTER PATTERN: Act as a Principal Staff Engineer. We are upgrading the Neera Realm AI job search pipeline. We need to implement a Unified Job Orchestrator using the Adapter Pattern and asyncio..."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* `ADZUNA_APP_ID` (optional), `ADZUNA_APP_KEY` (optional).
+  * *Packages added:* `python-jobspy>=1.1.80` (pip).
+  * *DB Changes:* None.
+* **The Snippet (Core Code):**
+  ```python
+  # Concurrent Multi-Source Adapter Execution & Deduplication
+  tasks = [ats_adapter.fetch_jobs(ctx), jobspy_adapter.fetch_jobs(ctx), adzuna_adapter.fetch_jobs(ctx)]
+  results = await asyncio.gather(*tasks, return_exceptions=True)
+  deduped_jobs = [_normalize_key(j.company, j.title) for j in flattened_results]
+  ```
+* **The Verification (How to test):**
+  * *Python Execution:* Ran standalone Python test script executing `fetch_all_jobs_concurrently` and `match_jobs_for_resume` across multi-source adapters.
+  * *Fault Isolation:* Verified graceful degradation when JobSpy/Adzuna keys are missing or time out.
+  * *TypeScript Check:* `npx tsc --noEmit` passed with 0 errors.
+
+---
+
 ## [2026-08-13] — Feature: Startup Funding Radar & Automated Ingestion in Job Agent
 
 ### 1. Real-Time Funding RSS Ingestion & Per-User Deduplication
