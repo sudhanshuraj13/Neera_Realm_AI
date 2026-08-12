@@ -155,32 +155,122 @@ async def fetch_ashby_jobs(
         return []
 
 
+NON_IT_ENGINEERING_PHRASES: list[str] = [
+    "mechanical engineer",
+    "civil engineer",
+    "chemical engineer",
+    "aerospace engineer",
+    "structural engineer",
+    "industrial engineer",
+    "biomedical engineer",
+    "environmental engineer",
+    "petroleum engineer",
+    "materials engineer",
+    "mining engineer",
+    "marine engineer",
+    "nuclear engineer",
+    "audio engineer",
+    "sound engineer",
+]
+
+IT_ROLE_KEYWORDS: list[str] = [
+    "software",
+    "developer",
+    "fullstack",
+    "full stack",
+    "backend",
+    "frontend",
+    "web",
+    "programmer",
+    "coder",
+    "devops",
+    "cloud",
+    "data scientist",
+    "data engineer",
+    "ai",
+    "ml",
+    "machine learning",
+    "sre",
+    "site reliability",
+    "engineer",
+]
+
+
+def is_it_role(role: str) -> bool:
+    """
+    Check if a given role string explicitly contains IT-related keywords,
+    excluding non-IT engineering roles like 'mechanical engineer' or 'civil engineer'.
+    """
+    if not role:
+        return False
+    role_lower = role.strip().lower()
+
+    sanitized = role_lower
+    for non_it in NON_IT_ENGINEERING_PHRASES:
+        sanitized = sanitized.replace(non_it, "")
+
+    return any(kw in sanitized for kw in IT_ROLE_KEYWORDS)
+
+
+def is_job_title_matching(title: str, keywords: set[str]) -> bool:
+    """
+    Strictly filter job titles against user role keywords.
+
+    1. Negative Filtering:
+       If keywords do NOT contain IT/software terms, any job title containing
+       'software', 'backend', 'frontend', 'fullstack', 'devops', etc. MUST BE DROPPED.
+       If keywords do NOT contain 'sales', any job title containing 'sales' MUST BE DROPPED.
+
+    2. Positive Filtering:
+       The job title must contain at least one of the candidate's keywords.
+    """
+    if not title:
+        return False
+    if not keywords:
+        return True
+
+    title_lower = title.strip().lower()
+
+    # 1. Negative Filtering (Domain exclusions)
+    has_software_keywords = any(
+        kw in " ".join(keywords)
+        for kw in ["software", "developer", "backend", "frontend", "fullstack", "devops", "sre", "programmer", "coder", "systems engineer"]
+    )
+    if not has_software_keywords:
+        software_terms = ["software", "backend", "frontend", "fullstack", "full-stack", "devops", "sre", "firmware"]
+        if any(term in title_lower for term in software_terms):
+            return False
+
+    has_sales_keywords = any("sales" in kw for kw in keywords)
+    if not has_sales_keywords:
+        if "sales" in title_lower:
+            return False
+
+    # 2. Positive Keyword Matching
+    return any(kw in title_lower for kw in keywords)
+
+
 def build_role_keywords(
     primary_role: str = "",
     target_roles: list[str] | None = None,
     skills: list[str] | None = None,
 ) -> set[str]:
     """
-    Build candidate-specific role search keywords.
-    Guarantees 'software engineer' and 'software developer' are common baseline roles for all users,
-    plus specific titles derived from candidate's primary role, target roles & extracted skills
-    (e.g., AI Engineer, Backend Engineer, Frontend Engineer, Data Engineer).
+    Build candidate-specific role search keywords without hardcoded software bias.
+    Initializes an empty set and populates primary_role & target_roles.
+    Derived software roles (Backend, AI, Frontend, etc.) are ONLY appended if the candidate's
+    primary_role or target_roles explicitly contain IT-related keywords (excluding mechanical/civil engineers).
     """
-    keywords: set[str] = {
-        "software engineer",
-        "software developer",
-        "fullstack",
-        "full stack",
-        "engineer",
-        "developer",
-    }
+    keywords: set[str] = set()
+    all_candidate_roles: list[str] = []
 
     if primary_role:
         clean = primary_role.strip().lower()
         if clean:
             keywords.add(clean)
+            all_candidate_roles.append(clean)
             for word in clean.split():
-                if len(word) > 2 and word not in {"fresher", "junior", "senior"}:
+                if len(word) > 2 and word not in {"fresher", "junior", "senior", "lead", "principal", "staff"}:
                     keywords.add(word)
 
     if target_roles:
@@ -188,23 +278,38 @@ def build_role_keywords(
             clean = r.strip().lower()
             if clean:
                 keywords.add(clean)
+                all_candidate_roles.append(clean)
                 for word in clean.split():
-                    if len(word) > 2 and word not in {"fresher", "junior", "senior"}:
+                    if len(word) > 2 and word not in {"fresher", "junior", "senior", "lead", "principal", "staff"}:
                         keywords.add(word)
 
-    if skills:
-        for skill in skills:
-            sk_lower = skill.strip().lower()
-            if any(term in sk_lower for term in ["ai", "ml", "artificial intelligence", "machine learning", "genai", "llm"]):
-                keywords.update({"ai", "ml", "ai engineer", "ai developer", "machine learning", "data scientist", "llm"})
-            if any(term in sk_lower for term in ["backend", "api", "node", "python", "java", "golang", "postgres"]):
-                keywords.update({"backend", "backend engineer", "backend developer", "systems engineer"})
-            if any(term in sk_lower for term in ["frontend", "react", "vue", "angular", "ui"]):
-                keywords.update({"frontend", "frontend engineer", "frontend developer", "web developer"})
-            if any(term in sk_lower for term in ["cloud", "devops", "aws", "docker", "kubernetes"]):
-                keywords.update({"devops", "cloud engineer", "infrastructure", "site reliability"})
-            if any(term in sk_lower for term in ["mobile", "flutter", "android", "ios", "react native"]):
-                keywords.update({"mobile", "android", "ios", "flutter", "react native"})
+    # ONLY append derived software roles IF candidate roles explicitly contain IT-related keywords
+    is_it_candidate = any(is_it_role(r) for r in all_candidate_roles)
+
+    if is_it_candidate:
+        # Common baseline roles for IT candidates
+        keywords.update({
+            "software engineer",
+            "software developer",
+            "fullstack",
+            "full stack",
+            "developer",
+            "engineer",
+        })
+
+        if skills:
+            for skill in skills:
+                sk_lower = skill.strip().lower()
+                if any(term in sk_lower for term in ["ai", "ml", "artificial intelligence", "machine learning", "genai", "llm"]):
+                    keywords.update({"ai", "ml", "ai engineer", "ai developer", "machine learning", "data scientist", "llm"})
+                if any(term in sk_lower for term in ["backend", "api", "node", "python", "java", "golang", "postgres"]):
+                    keywords.update({"backend", "backend engineer", "backend developer", "systems engineer"})
+                if any(term in sk_lower for term in ["frontend", "react", "vue", "angular"]):
+                    keywords.update({"frontend", "frontend engineer", "frontend developer", "web developer"})
+                if any(term in sk_lower for term in ["cloud", "devops", "aws", "docker", "kubernetes"]):
+                    keywords.update({"devops", "cloud engineer", "infrastructure", "site reliability"})
+                if any(term in sk_lower for term in ["mobile", "flutter", "android", "ios", "react native"]):
+                    keywords.update({"mobile", "android", "ios", "flutter", "react native"})
 
     return keywords
 
@@ -216,28 +321,25 @@ async def fetch_global_startup_jobs(
     skills: list[str] | None = None,
 ) -> list[JobListing]:
     """
-    Fetch open job listings from global startup & tech job aggregators (Remotive & Arbeitnow).
-    Filters listings to match candidate's target roles, derived skill roles (AI Engineer,
-    Backend Engineer, etc.), and common Software Engineer baseline roles.
+    Fetch open job listings from global job aggregators (Remotive & Arbeitnow).
+    Filters listings to match candidate's target roles and keywords.
     """
     jobs: list[JobListing] = []
     keywords = build_role_keywords(primary_role, target_roles, skills)
 
-    # 1. Remotive Public Startup & Remote Jobs API
+    # 1. Remotive Public Remote Jobs API
     remotive_url = "https://remotive.com/api/remote-jobs?limit=50"
     try:
         resp = await client.get(remotive_url)
         if resp.status_code == 200:
             data = resp.json()
             for item in data.get("jobs", []):
-                company = item.get("company_name", "Startup")
-                title = item.get("title", "Software Engineer")
+                company = item.get("company_name", "Company")
+                title = item.get("title", "Position")
                 location = item.get("candidate_required_location", "Remote")
                 apply_url = item.get("url", "")
 
-                title_lower = title.lower()
-                # Filter to ensure job matches candidate's specific roles/skills or common baseline
-                if any(kw in title_lower for kw in keywords):
+                if is_job_title_matching(title, keywords):
                     jobs.append(
                         JobListing(
                             company=company,
@@ -246,11 +348,11 @@ async def fetch_global_startup_jobs(
                             apply_url=apply_url or "https://remotive.com",
                         )
                     )
-            logger.info("🚀 Remotive Global Startups: fetched %d matched jobs", len(jobs))
+            logger.info("🚀 Remotive Global Jobs: fetched %d matched jobs", len(jobs))
     except Exception as e:
         logger.warning("⚠️ Remotive fetch error: %s", e)
 
-    # 2. Arbeitnow Public Tech Job Board API
+    # 2. Arbeitnow Public Job Board API
     arbeitnow_url = "https://www.arbeitnow.com/api/job-board-api"
     try:
         resp = await client.get(arbeitnow_url)
@@ -258,13 +360,12 @@ async def fetch_global_startup_jobs(
             data = resp.json()
             count = 0
             for item in data.get("data", []):
-                company = item.get("company_name", "Tech Startup")
-                title = item.get("title", "Developer")
+                company = item.get("company_name", "Company")
+                title = item.get("title", "Position")
                 location = item.get("location", "Remote / Flexible")
                 apply_url = item.get("url", "")
 
-                title_lower = title.lower()
-                if any(kw in title_lower for kw in keywords):
+                if is_job_title_matching(title, keywords):
                     jobs.append(
                         JobListing(
                             company=company,
@@ -276,7 +377,7 @@ async def fetch_global_startup_jobs(
                     count += 1
                     if count >= 30:
                         break
-            logger.info("🌐 Arbeitnow Tech Jobs: fetched %d matched jobs", count)
+            logger.info("🌐 Arbeitnow Jobs: fetched %d matched jobs", count)
     except Exception as e:
         logger.warning("⚠️ Arbeitnow fetch error: %s", e)
 
@@ -297,7 +398,7 @@ async def fetch_all_jobs(
 ) -> list[JobListing]:
     """
     Fetch jobs from target dream companies (Greenhouse, Lever, Ashby)
-    plus global startup job boards (Remotive, Arbeitnow).
+    plus global job boards (Remotive, Arbeitnow).
 
     Args:
         company_slugs: Custom target/dream companies specified by the user
@@ -350,5 +451,12 @@ async def fetch_all_jobs(
             if isinstance(result, list):
                 all_jobs.extend(result)
 
-    logger.info("✅ Total jobs fetched: %d across target companies & global startup boards", len(all_jobs))
+    keywords = build_role_keywords(primary_role, target_roles, skills)
+    if keywords:
+        filtered_jobs = [j for j in all_jobs if is_job_title_matching(j.title, keywords)]
+        logger.info("🎯 Strict ATS job filtering: %d -> %d jobs matching keywords: %s", len(all_jobs), len(filtered_jobs), list(keywords)[:5])
+        all_jobs = filtered_jobs
+
+    logger.info("✅ Total jobs fetched: %d across target companies & global job boards", len(all_jobs))
     return all_jobs
+

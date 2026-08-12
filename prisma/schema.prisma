@@ -23,12 +23,14 @@ model User {
   webhookChannelId  String?
   calendarSyncToken String?
 
-  // Career intelligence (Phase 1 & Phase 2.5)
+  // Career intelligence (Phase 1 & Phase 2.5 & Phase 4)
   resumeJson         Json?    @db.JsonB   // Extracted raw skills, experience, projects
   isPro              Boolean  @default(false) // Future monetization flag
   experienceLevel    String?  // e.g. "Fresher", "1-3 Years", "Senior"
   targetRoles        String[] @default([]) // e.g. ["Backend", "AI"]
   locationPreference String?  // e.g. "Remote", "India", "US"
+  onboardingCompleted Boolean @default(false)
+  primaryRole        String?  // Confirmed target primary job title (e.g. "UI/UX Designer")
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

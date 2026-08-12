@@ -190,7 +190,8 @@ export async function matchJobs(
   companySlugs?: string[],
   experienceLevel?: string,
   targetRoles?: string[],
-  locationPreference?: string
+  locationPreference?: string,
+  primaryRole?: string
 ): Promise<JobMatchResponse> {
   const { data } = await aiClient.post<JobMatchResponse>(
     "/api/v1/jobs/match",
@@ -201,6 +202,7 @@ export async function matchJobs(
       experience_level: experienceLevel,
       target_roles: targetRoles,
       location_preference: locationPreference,
+      primary_role: primaryRole,
     }
   );
   return data;

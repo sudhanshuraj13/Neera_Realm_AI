@@ -221,11 +221,12 @@ async def jobs_match(payload: dict):
     experience_level = payload.get("experience_level")
     target_roles = payload.get("target_roles")
     location_preference = payload.get("location_preference")
+    primary_role = payload.get("primary_role")
 
     logger.info(
         "💼 Job match request — user_id=%s, role='%s', exp_level=%s, location=%s",
         user_id,
-        resume_profile.get("primary_role", "Unknown"),
+        primary_role or resume_profile.get("primary_role", "Unknown"),
         experience_level or "Not specified",
         location_preference or "Not specified",
     )
@@ -237,6 +238,7 @@ async def jobs_match(payload: dict):
             experience_level=experience_level,
             target_roles=target_roles,
             location_preference=location_preference,
+            primary_role=primary_role,
         )
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000

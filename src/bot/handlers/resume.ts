@@ -144,24 +144,25 @@ export function registerResumeHandlers(bot: Bot): void {
         },
       });
 
-      // 6. Step B: IMMEDIATELY follow up with Deterministic Experience Level Selection Keyboard
-      const expKeyboard = new InlineKeyboard()
-        .text("🎓 Fresher (0-1 yrs)", "action:set_exp:Fresher")
-        .text("💻 Junior (1-3 yrs)", "action:set_exp:1-3 Years")
+      // 6. Step 1 of Wellfound-Style Stateful Onboarding: Interactive Primary Role Confirmation
+      const aiGuess = (profile["primary_role"] as string) || "General Professional";
+
+      const roleConfirmKeyboard = new InlineKeyboard()
+        .text(`✅ Confirm: ${aiGuess}`, "action:confirm_ai_role")
         .row()
-        .text("🚀 Senior (3+ yrs)", "action:set_exp:Senior");
+        .text("✏️ Set Custom Target Role", "action:prompt_custom_role");
 
       await sendSafeTelegramMessage(
         ctx,
         [
-          "✅ <b>Resume skills & projects extracted!</b>",
+          "✅ <b>Resume skills & profile extracted!</b>",
           "",
-          "<b>Step 2/2: Experience Level Setup</b>",
-          "What is your exact professional experience level?",
+          "🤖 <b>AI Role Detection:</b>",
+          `It looks like your primary role is: <b>${aiGuess}</b>`,
           "",
-          "<i>Tap a button below to save your experience preference:</i>",
+          "<i>Is this the exact primary role you want me to hunt jobs for?</i>",
         ].join("\n"),
-        { reply_markup: expKeyboard }
+        { reply_markup: roleConfirmKeyboard }
       );
 
       console.log(
@@ -182,6 +183,158 @@ export function registerResumeHandlers(bot: Bot): void {
         );
       }
     }
+  });
+
+  // Callback query handler for Confirming AI-detected Primary Role
+  bot.callbackQuery("action:confirm_ai_role", async (ctx) => {
+    const from = ctx.from;
+    if (!from) return;
+
+    try {
+      const user = await getOrCreateUser(
+        BigInt(from.id),
+        from.first_name,
+        from.username
+      );
+
+      const profile = (user.resumeJson as Record<string, unknown>) || {};
+      const aiGuess = (profile["primary_role"] as string) || "General Professional";
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          primaryRole: aiGuess,
+          onboardingCompleted: true,
+        },
+      });
+
+      await ctx.answerCallbackQuery({ text: `Confirmed primary role: ${aiGuess}` });
+
+      const expKeyboard = new InlineKeyboard()
+        .text("🎓 Fresher (0-1 yrs)", "action:set_exp:Fresher")
+        .text("💻 Junior (1-3 yrs)", "action:set_exp:1-3 Years")
+        .row()
+        .text("🚀 Senior (3+ yrs)", "action:set_exp:Senior");
+
+      await sendSafeTelegramMessage(
+        ctx,
+        [
+          `🎯 <b>Confirmed Primary Role:</b> <code>${aiGuess}</code>`,
+          "",
+          "<b>Step 2/2: Experience Level Setup</b>",
+          "What is your exact professional experience level?",
+          "",
+          "<i>Tap a button below to save your experience preference:</i>",
+        ].join("\n"),
+        { reply_markup: expKeyboard }
+      );
+    } catch (err) {
+      console.error("❌ Confirm AI role action error:", err);
+      await sendSafeTelegramMessage(
+        ctx,
+        "⚠️ Could not confirm primary role. Please try again."
+      );
+    }
+  });
+
+  // Callback query handler for Prompting Custom Target Role
+  bot.callbackQuery("action:prompt_custom_role", async (ctx) => {
+    const from = ctx.from;
+    if (!from) return;
+
+    try {
+      const user = await getOrCreateUser(
+        BigInt(from.id),
+        from.first_name,
+        from.username
+      );
+
+      const profile = (user.resumeJson as Record<string, unknown>) || {};
+      profile["_pendingCustomRolePrompt"] = true;
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          resumeJson: profile as object,
+        },
+      });
+
+      await ctx.answerCallbackQuery({ text: "Type your target primary role" });
+
+      await sendSafeTelegramMessage(
+        ctx,
+        [
+          "✏️ <b>Set Your Custom Target Role</b>",
+          "",
+          "Please reply with your exact target primary role (e.g., <code>UI/UX Designer</code>, <code>Mechanical Engineer</code>, <code>Data Scientist</code>, or <code>DevOps Engineer</code>):",
+        ].join("\n")
+      );
+    } catch (err) {
+      console.error("❌ Prompt custom role error:", err);
+      await sendSafeTelegramMessage(
+        ctx,
+        "⚠️ Could not initiate custom role prompt. Please try again."
+      );
+    }
+  });
+
+  // Text message listener for Custom Role Input when _pendingCustomRolePrompt is set
+  bot.on("message:text", async (ctx, next) => {
+    const text = ctx.message.text.trim();
+    if (text.startsWith("/")) {
+      return next();
+    }
+
+    const from = ctx.from;
+    if (!from) return next();
+
+    try {
+      const user = await getOrCreateUser(
+        BigInt(from.id),
+        from.first_name,
+        from.username
+      );
+
+      const profile = (user.resumeJson as Record<string, unknown>) || {};
+      if (profile["_pendingCustomRolePrompt"] === true) {
+        const customRole = text;
+        const updatedProfile = { ...profile };
+        delete updatedProfile["_pendingCustomRolePrompt"];
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            primaryRole: customRole,
+            onboardingCompleted: true,
+            resumeJson: updatedProfile as object,
+          },
+        });
+
+        const expKeyboard = new InlineKeyboard()
+          .text("🎓 Fresher (0-1 yrs)", "action:set_exp:Fresher")
+          .text("💻 Junior (1-3 yrs)", "action:set_exp:1-3 Years")
+          .row()
+          .text("🚀 Senior (3+ yrs)", "action:set_exp:Senior");
+
+        await sendSafeTelegramMessage(
+          ctx,
+          [
+            `🎯 <b>Target Primary Role Set to:</b> <code>${customRole}</code>`,
+            "",
+            "<b>Step 2/2: Experience Level Setup</b>",
+            "What is your exact professional experience level?",
+            "",
+            "<i>Tap a button below to save your preference:</i>",
+          ].join("\n"),
+          { reply_markup: expKeyboard }
+        );
+        return;
+      }
+    } catch (err) {
+      console.error("❌ Custom role text handling error:", err);
+    }
+
+    return next();
   });
 
   // Callback query handler for Deterministic Experience Level Selection (Step C)
@@ -210,6 +363,7 @@ export function registerResumeHandlers(bot: Bot): void {
         [
           "🎉 <b>Career Profile Setup Complete!</b>",
           "",
+          user.primaryRole ? `<b>Primary Role:</b> <code>${user.primaryRole}</code>` : "",
           `<b>Experience Level:</b> <code>${level}</code>`,
           user.targetRoles.length > 0
             ? `<b>Target Roles:</b> ${user.targetRoles.map((r) => `<code>${r}</code>`).join(", ")}`
@@ -269,7 +423,8 @@ export function registerResumeHandlers(bot: Bot): void {
         undefined,
         user.experienceLevel ?? undefined,
         user.targetRoles,
-        user.locationPreference ?? undefined
+        user.locationPreference ?? undefined,
+        user.primaryRole ?? undefined
       );
 
       const expFilterKeyboard = new InlineKeyboard()
@@ -328,7 +483,8 @@ export function registerResumeHandlers(bot: Bot): void {
         undefined,
         user.experienceLevel ?? undefined,
         user.targetRoles,
-        user.locationPreference ?? undefined
+        user.locationPreference ?? undefined,
+        user.primaryRole ?? undefined
       );
 
       const expFilterKeyboard = new InlineKeyboard()
@@ -387,7 +543,10 @@ export function registerResumeHandlers(bot: Bot): void {
         user.id,
         user.resumeJson as Record<string, unknown>,
         undefined,
-        level
+        level,
+        user.targetRoles,
+        user.locationPreference ?? undefined,
+        user.primaryRole ?? undefined
       );
 
       const expFilterKeyboard = new InlineKeyboard()
@@ -427,15 +586,15 @@ export function registerResumeHandlers(bot: Bot): void {
     );
   });
 
-  // Inline keyboard button callback: "💻 Tech Career Intelligence"
+  // Inline keyboard button callback: "💼 Jobs & Career Intelligence"
   bot.callbackQuery("action:career_prep", async (ctx) => {
-    await ctx.answerCallbackQuery({ text: "Tech Career & ATS Matching" });
+    await ctx.answerCallbackQuery({ text: "Jobs & Careers ATS Matching" });
     await sendSafeTelegramMessage(
       ctx,
       [
-        "<b>💻 Tech Career Intelligence & Job Matching</b>",
+        "<b>💼 Jobs & Career Intelligence & Job Matching</b>",
         "",
-        "Neera AI dynamically scans global startup boards & target company ATS feeds (Greenhouse, Lever, Ashby) to aggregate live job listings.",
+        "Neera AI dynamically scans global job boards & target company ATS feeds (Greenhouse, Lever, Ashby) to aggregate live job listings.",
         "",
         "To customize your target companies or start:",
         "• Type <code>/target_companies Google, Stripe, Razorpay</code> to set dream companies!",

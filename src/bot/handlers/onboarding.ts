@@ -36,7 +36,7 @@ export function registerOnboardingHandlers(bot: Bot): void {
     const keyboard = new InlineKeyboard()
       .text("📈 Finance & Markets", CALLBACK.INDUSTRY_FINANCE)
       .row()
-      .text("🚀 Tech & Startups", CALLBACK.INDUSTRY_TECH)
+      .text("💼 Jobs and Careers", CALLBACK.INDUSTRY_TECH)
       .row()
       .text("⏩ Skip Onboarding", CALLBACK.SKIP);
 
@@ -102,7 +102,7 @@ export function registerOnboardingHandlers(bot: Bot): void {
     );
 
     await updateUserPreferences(user.id, {
-      industries: ["Tech", "Startups"],
+      industries: ["Jobs", "Careers"],
       watchlist: ["NVDA", "TSLA", "MSFT"],
       onboardingDone: true,
     });
@@ -113,15 +113,15 @@ export function registerOnboardingHandlers(bot: Bot): void {
       .text("🟢 NVDA", "action:query:NVDA")
       .text("⚡ TSLA", "action:query:TSLA")
       .row()
-      .text("💻 Tech Career Intelligence", "action:career_prep");
+      .text("💼 Jobs & Career Intelligence", "action:career_prep");
 
     await ctx.editMessageText(
       [
-        "<b>🚀 Tech & Startups Hub Ready!</b>",
+        "<b>💼 Jobs and Careers Hub Ready!</b>",
         "",
-        "Welcome to your Tech & Career Intelligence Suite.",
+        "Welcome to your Jobs & Career Intelligence Suite.",
         "",
-        "• <b>Focus:</b> Tech, Startups & Career Intelligence",
+        "• <b>Focus:</b> Jobs, Careers & Market Intelligence",
         "• <b>Watchlist:</b> NVDA, TSLA, MSFT",
         "• <b>Briefing Time:</b> 08:00 UTC",
         "",
@@ -136,7 +136,7 @@ export function registerOnboardingHandlers(bot: Bot): void {
       }
     );
 
-    await ctx.answerCallbackQuery({ text: "Selected: 🚀 Tech & Startups" });
+    await ctx.answerCallbackQuery({ text: "Selected: 💼 Jobs and Careers" });
   });
 
   bot.callbackQuery(CALLBACK.SKIP, async (ctx) => {

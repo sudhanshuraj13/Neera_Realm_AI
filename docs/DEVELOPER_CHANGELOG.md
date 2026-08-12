@@ -8,6 +8,74 @@ This log is structured for vibe coding. Each update is documented using four sta
 
 ---
 
+## [2026-08-12] — Feature: Wellfound-Style Stateful Onboarding Flow & Strict Primary Role Determinism
+
+### 1. Persistent User Career Profile & Interactive Role Confirmation
+* **The Vibe (What & Why):**
+  * *Analogy:* Like moving from an anonymous guest checkout at an online store to a personalized member account where your size, address, and style preferences are saved so the store never asks or guesses again.
+  * *Technical:* Transformed Neera AI into a stateful platform like Wellfound or Naukri by extending the Prisma `User` schema in Neon PostgreSQL with `onboardingCompleted` (Boolean) and `primaryRole` (String). Upon PDF resume upload (`/api/v1/resume/parse`), the Telegram bot displays an interactive confirmation keyboard asking the candidate to confirm the AI's detected primary role or manually type their exact target role. Custom text input is captured via stateful text listener, setting `onboardingCompleted = true` and persisting `primaryRole` to Neon DB.
+* **The Prompt (How to talk to the AI):**
+  * "PROMPT: PHASE 4 - THE 'WELLFOUND-STYLE' STATEFUL ONBOARDING FLOW: Act as a Principal Full-Stack Architect. We are transitioning Neera Realm AI from a stateless chatbot to a stateful, personalized career platform like Wellfound or Naukri..."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* `fpdf2` (pip).
+  * *DB Changes:* Added `onboardingCompleted` (Boolean, default `false`) and `primaryRole` (String, optional) to `User` model in `prisma/schema.prisma` and applied via `npx prisma db push`.
+* **The Snippet (Core Code):**
+  ```typescript
+  // Telegram Inline Keyboard for Primary Role Confirmation
+  const roleConfirmKeyboard = new InlineKeyboard()
+    .text(`✅ Confirm: ${aiGuess}`, "action:confirm_ai_role")
+    .row()
+    .text("✏️ Set Custom Target Role", "action:prompt_custom_role");
+
+  await sendSafeTelegramMessage(ctx, [
+    "✅ <b>Resume skills & profile extracted!</b>",
+    "",
+    "🤖 <b>AI Role Detection:</b>",
+    `It looks like your primary role is: <b>${aiGuess}</b>`,
+    "",
+    "<i>Is this the exact primary role you want me to hunt jobs for?</i>",
+  ].join("\n"), { reply_markup: roleConfirmKeyboard });
+  ```
+* **The Verification (How to test):**
+  * *DB Migration:* Ran `npx prisma db push` to synchronize Neon PostgreSQL schema.
+  * *PDF Generation:* Created 3 test resumes via `scripts/generate_test_resumes.py` (`ui_ux_fresher.pdf`, `mechanical_fresher.pdf`, `devops_senior.pdf`).
+  * *Automated Type & API Verification:* Ran `npx tsc --noEmit` (0 errors) and verified Python endpoint job matching against confirmed `primary_role`.
+
+---
+
+## [2026-08-12] — Refactor: Remove Hardcoded Software Bias in ATS Service & Generalize Career Messaging
+
+### 1. Dynamic Domain Keyword Extraction & Strict ATS Search Filtering
+* **The Vibe (What & Why):**
+  * *Analogy:* Like replacing a restaurant menu that forces every customer to get a side of french fries (even if they ordered sushi) with a custom order system that strictly respects their dietary preference.
+  * *Technical:* Rewrote `build_role_keywords` in `ats_service.py` to initialize an empty set `keywords: set[str] = set()`, populate `primary_role` and `target_roles`, and only derive software engineering roles (AI, Backend, Frontend, DevOps) IF candidate roles explicitly contain IT keywords (excluding non-IT titles like 'mechanical engineer' or 'civil engineer'). Implemented `is_job_title_matching` for strict negative domain filtering (dropping 'software', 'backend', and 'sales' titles for non-IT users like UI/UX Designers or Mechanical Engineers). Replaced all hardcoded 'Tech & Startups' UI copy across Telegram handlers and AI agents with 'Jobs & Careers'.
+* **The Prompt (How to talk to the AI):**
+  * "REMOVE HARDCODED SOFTWARE BIAS IN ATS SERVICE: Act as a Principal Python SRE. We need to fix a critical domain-bias bug in `ai_service/app/services/ats_service.py`..."
+* **The Blast Radius (Side Effects):**
+  * *Env Vars added:* None.
+  * *Packages added:* None.
+  * *DB Changes:* None.
+* **The Snippet (Core Code):**
+  ```python
+  def is_job_title_matching(title: str, keywords: set[str]) -> bool:
+      if not title or not keywords:
+          return True
+      title_lower = title.strip().lower()
+
+      has_software = any(kw in " ".join(keywords) for kw in ["software", "developer", "backend", "frontend", "devops"])
+      if not has_software and any(term in title_lower for term in ["software", "backend", "frontend", "fullstack", "devops"]):
+          return False
+
+      has_sales = any("sales" in kw for kw in keywords)
+      if not has_sales and "sales" in title_lower:
+          return False
+
+      return any(kw in title_lower for kw in keywords)
+  ```
+
+---
+
 ## [2026-08-11] — Refactor: Native Async LangGraph Nodes & Non-Blocking Orchestration
 
 ### 1. Native Async LangGraph Node Functions

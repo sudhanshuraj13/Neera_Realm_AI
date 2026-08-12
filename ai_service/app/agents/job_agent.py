@@ -108,11 +108,6 @@ def score_job_match(
     if matched_role:
         score += 20
         reasons.append(f"Role: {matched_role.title()}")
-    elif any(
-        term in title_lower
-        for term in ["software", "engineer", "developer", "backend", "frontend", "fullstack", "data", "ai", "cloud"]
-    ):
-        score += 10
 
     # 5. Skill keyword matching
     matched_skills = []
@@ -137,16 +132,18 @@ async def match_jobs_for_resume(
     experience_level: str | None = None,
     target_roles: list[str] | None = None,
     location_preference: str | None = None,
+    primary_role: str | None = None,
 ) -> dict[str, Any]:
     """
-    Fetch live jobs from target dream companies and global startup boards using deterministic DB preferences.
+    Fetch live jobs from target dream companies and global job boards using deterministic DB preferences.
 
     Args:
         resume_profile: Dictionary representation of ResumeProfile
         company_slugs: Custom target company slugs specified by user
         experience_level: Explicit experience level ("Fresher", "1-3 Years", "Senior")
-        target_roles: Explicit target roles (e.g., ["Backend", "AI"])
+        target_roles: Explicit target roles (e.g., ["Product Designer", "UX Researcher"])
         location_preference: Explicit location preference (e.g., "Remote", "India")
+        primary_role: Confirmed primary role title from database
 
     Returns:
         Dict with total_found, matched_count, experience_level, location_preference, and formatted_html
@@ -155,7 +152,7 @@ async def match_jobs_for_resume(
     if isinstance(target_companies, str):
         target_companies = [c.strip() for c in target_companies.split(",") if c.strip()]
 
-    primary_role = str(resume_profile.get("primary_role", "Software Engineer"))
+    p_role = primary_role or str(resume_profile.get("primary_role") or "General Candidate")
     roles = target_roles or [str(r) for r in resume_profile.get("target_roles", [])]
     skills = [str(s) for s in resume_profile.get("skills", [])]
 
@@ -164,17 +161,17 @@ async def match_jobs_for_resume(
 
     logger.info(
         "🔍 Deterministic job matching — role='%s', exp_level='%s', location='%s', target_roles=%s",
-        primary_role,
+        p_role,
         exp_label,
         loc_label,
         roles,
     )
 
-    # 1. Fetch live jobs dynamically (target companies + global startup job aggregators)
+    # 1. Fetch live jobs dynamically (target companies + global job aggregators)
     all_jobs = await fetch_all_jobs(
         company_slugs=target_companies,
         include_global_startups=True,
-        primary_role=primary_role,
+        primary_role=p_role,
         target_roles=roles,
         skills=skills,
     )
@@ -186,7 +183,7 @@ async def match_jobs_for_resume(
             f"<b>🎯 Role:</b> <code>{primary_role}</code>",
             f"<b>📊 Experience:</b> <code>{exp_label}</code>",
             f"<b>📍 Location:</b> <code>{loc_label}</code>",
-            f"<b>🏢 Target Companies:</b> {', '.join(target_companies) if target_companies else 'All Global Startups & Tech'}",
+            f"<b>🏢 Target Companies:</b> {', '.join(target_companies) if target_companies else 'All Global Companies & Job Boards'}",
             "",
             "⚠️ Job search engine is currently updating. Try <code>/jobs</code> again in a moment!",
         ]
@@ -242,8 +239,8 @@ async def match_jobs_for_resume(
         f"<b>📊 Experience Level:</b> <code>{exp_label}</code>",
         f"<b>📍 Location Preference:</b> <code>{loc_label}</code>",
         f"<b>🏢 Target Companies:</b> {target_comp_str}",
-        f"<b>🛠️ Top Skills:</b> {', '.join(skills[:5]) if skills else 'Software Engineering'}",
-        f"<b>⚡ Live Discovered:</b> {len(all_jobs)} open postings across global startups & tech",
+        f"<b>🛠️ Top Skills:</b> {', '.join(skills[:5]) if skills else 'Professional Skills'}",
+        f"<b>⚡ Live Discovered:</b> {len(all_jobs)} open postings across global job boards",
         "",
     ]
 
@@ -304,7 +301,7 @@ async def run_job_agent(prompt: str, context: Any) -> Any:
 
     if not resume_profile:
         content = (
-            "<b>💼 Tech & Career Job Matcher</b>\n\n"
+            "<b>💼 Jobs & Careers Matcher</b>\n\n"
             "You haven't uploaded a resume yet!\n\n"
             "To get personalized live job postings matched to your target role & skills:\n"
             "👉 Send your resume PDF using <code>/resume</code> or tap <b>📄 Upload Resume</b>!"
