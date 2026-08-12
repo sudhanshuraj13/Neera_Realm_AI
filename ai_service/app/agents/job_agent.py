@@ -111,13 +111,14 @@ async def match_jobs_for_resume(
     Fetch live jobs concurrently across multi-source job search adapters (ATS, JobSpy, Adzuna).
     Includes Startup Funding Radar integration for high-growth funding alerts.
     """
-    target_companies = company_slugs or resume_profile.get("target_companies", [])
+    profile = resume_profile if isinstance(resume_profile, dict) else {}
+    target_companies = company_slugs or profile.get("target_companies", [])
     if isinstance(target_companies, str):
         target_companies = [c.strip() for c in target_companies.split(",") if c.strip()]
 
-    p_role = primary_role or str(resume_profile.get("primary_role") or "General Candidate")
-    roles = target_roles or [str(r) for r in resume_profile.get("target_roles", [])]
-    skills = [str(s) for s in resume_profile.get("skills", [])]
+    p_role = primary_role or str(profile.get("primary_role") or "General Candidate")
+    roles = target_roles or [str(r) for r in profile.get("target_roles", [])]
+    skills = [str(s) for s in profile.get("skills", [])]
 
     exp_label = experience_level or "Not specified"
     loc_label = location_preference or "Any Location"

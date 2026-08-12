@@ -413,18 +413,24 @@ export function registerResumeHandlers(bot: Bot): void {
             "",
             "You haven't uploaded a resume yet!",
             "",
-            "👉 Please upload your resume as a <b>PDF file</b> using <code>/resume</code> or tap the button below.",
+            "👉 Please upload your resume as a <b>PDF file</b> using <code>/resume</code> or tap the button below to start finding jobs.",
           ].join("\n"),
           { reply_markup: uploadKeyboard }
         );
         return;
       }
 
-      // Candidate has a stored resume profile! Fetch matching live jobs with deterministic DB filters
-      const sentStartupIds = await getSentFundingAlertIds(user.id);
+      const resumeData = user.resumeJson as Record<string, unknown>;
+      let sentStartupIds: string[] = [];
+      try {
+        sentStartupIds = await getSentFundingAlertIds(user.id);
+      } catch (dbErr) {
+        console.warn("⚠️ Could not fetch sent funding alert IDs:", dbErr);
+      }
+
       const result = await matchJobs(
         user.id,
-        user.resumeJson as Record<string, unknown>,
+        resumeData,
         undefined,
         user.experienceLevel ?? undefined,
         user.targetRoles,
@@ -434,7 +440,11 @@ export function registerResumeHandlers(bot: Bot): void {
       );
 
       if (result.sent_startup_ids && result.sent_startup_ids.length > 0) {
-        await recordSentFundingAlerts(user.id, result.sent_startup_ids);
+        try {
+          await recordSentFundingAlerts(user.id, result.sent_startup_ids);
+        } catch (dbErr) {
+          console.warn("⚠️ Could not record sent funding alerts:", dbErr);
+        }
       }
 
       const expFilterKeyboard = new InlineKeyboard()
@@ -452,13 +462,14 @@ export function registerResumeHandlers(bot: Bot): void {
         const hint =
           err.code === "AI_SERVICE_TIMEOUT"
             ? "⏳ <b>AI Engine Initializing:</b> The Python microservice is waking up on Render or scanning live ATS job feeds. Please wait 10 seconds and type <code>/jobs</code> again!"
-            : `⚠️ <b>AI Service Unreachable (${err.code}):</b> Please check that <code>AI_SERVICE_URL</code> is set correctly in your Render Web Service environment variables.`;
+            : `⚠️ <b>AI Service Unreachable (${err.code}):</b> ${err.message}`;
         await sendSafeTelegramMessage(ctx, hint);
       } else {
         console.error("❌ [Jobs] Processing error:", err);
+        const errMsg = err instanceof Error ? err.message : String(err);
         await sendSafeTelegramMessage(
           ctx,
-          "⚠️ Something went wrong while fetching job postings. Please try again."
+          `⚠️ <b>Job Search Error:</b> ${errMsg}. Please try typing <code>/jobs</code> again!`
         );
       }
     }
@@ -480,17 +491,36 @@ export function registerResumeHandlers(bot: Bot): void {
       );
 
       if (!user.resumeJson) {
+        const uploadKeyboard = new InlineKeyboard().text(
+          "📄 Upload Resume",
+          "action:upload_resume"
+        );
+
         await sendSafeTelegramMessage(
           ctx,
-          "⚠️ Please upload your resume using <code>/resume</code> first!"
+          [
+            "<b>💼 Job Matcher — No Resume Found</b>",
+            "",
+            "You haven't uploaded a resume yet!",
+            "",
+            "👉 Please upload your resume as a <b>PDF file</b> using <code>/resume</code> or tap the button below to start finding jobs.",
+          ].join("\n"),
+          { reply_markup: uploadKeyboard }
         );
         return;
       }
 
-      const sentStartupIds = await getSentFundingAlertIds(user.id);
+      const resumeData = user.resumeJson as Record<string, unknown>;
+      let sentStartupIds: string[] = [];
+      try {
+        sentStartupIds = await getSentFundingAlertIds(user.id);
+      } catch (dbErr) {
+        console.warn("⚠️ Could not fetch sent funding alert IDs:", dbErr);
+      }
+
       const result = await matchJobs(
         user.id,
-        user.resumeJson as Record<string, unknown>,
+        resumeData,
         undefined,
         user.experienceLevel ?? undefined,
         user.targetRoles,
@@ -500,7 +530,11 @@ export function registerResumeHandlers(bot: Bot): void {
       );
 
       if (result.sent_startup_ids && result.sent_startup_ids.length > 0) {
-        await recordSentFundingAlerts(user.id, result.sent_startup_ids);
+        try {
+          await recordSentFundingAlerts(user.id, result.sent_startup_ids);
+        } catch (dbErr) {
+          console.warn("⚠️ Could not record sent funding alerts:", dbErr);
+        }
       }
 
       const expFilterKeyboard = new InlineKeyboard()
@@ -518,12 +552,13 @@ export function registerResumeHandlers(bot: Bot): void {
         const hint =
           err.code === "AI_SERVICE_TIMEOUT"
             ? "⏳ <b>AI Engine Initializing:</b> Service is warming up. Please tap <b>💼 View Matching Jobs</b> again in 10 seconds!"
-            : `⚠️ Could not reach AI service: ${err.message}`;
+            : `⚠️ <b>AI Service Error (${err.code}):</b> ${err.message}`;
         await sendSafeTelegramMessage(ctx, hint);
       } else {
+        const errMsg = err instanceof Error ? err.message : String(err);
         await sendSafeTelegramMessage(
           ctx,
-          "⚠️ Could not fetch job matches right now. Please try again."
+          `⚠️ <b>Job Fetch Error:</b> ${errMsg}. Please tap <b>💼 View Matching Jobs</b> again in a moment!`
         );
       }
     }
@@ -548,17 +583,36 @@ export function registerResumeHandlers(bot: Bot): void {
       );
 
       if (!user.resumeJson) {
+        const uploadKeyboard = new InlineKeyboard().text(
+          "📄 Upload Resume",
+          "action:upload_resume"
+        );
+
         await sendSafeTelegramMessage(
           ctx,
-          "⚠️ Please upload your resume using <code>/resume</code> first!"
+          [
+            "<b>💼 Job Matcher — No Resume Found</b>",
+            "",
+            "You haven't uploaded a resume yet!",
+            "",
+            "👉 Please upload your resume as a <b>PDF file</b> using <code>/resume</code> or tap the button below to start finding jobs.",
+          ].join("\n"),
+          { reply_markup: uploadKeyboard }
         );
         return;
       }
 
-      const sentStartupIds = await getSentFundingAlertIds(user.id);
+      const resumeData = user.resumeJson as Record<string, unknown>;
+      let sentStartupIds: string[] = [];
+      try {
+        sentStartupIds = await getSentFundingAlertIds(user.id);
+      } catch (dbErr) {
+        console.warn("⚠️ Could not fetch sent funding alert IDs:", dbErr);
+      }
+
       const result = await matchJobs(
         user.id,
-        user.resumeJson as Record<string, unknown>,
+        resumeData,
         undefined,
         level,
         user.targetRoles,
