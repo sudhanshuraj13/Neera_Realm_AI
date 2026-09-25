@@ -134,3 +134,9 @@ desktop.ini
 *.sublime-project
 *.swp
 *.swo
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Standalone Repositories / Submodules (Maintained in Separate Repos)
+# ─────────────────────────────────────────────────────────────────────────────
+nextGen_ATS/
+

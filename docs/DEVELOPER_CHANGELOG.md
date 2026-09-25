@@ -5,8 +5,33 @@ This log is structured for vibe coding. Each update is documented using four sta
 2. **The Prompt (How to talk to the AI):** The exact instruction or context used to modify the code.
 3. **The Blast Radius (Side Effects):** Explicit tracking of Environment Variables, NPM/Pip Packages, and Database Schema updates.
 4. **The Snippet (Core Code):** Clean code snippet showcasing the core change.
+## 2026-09-26 — Standalone Repository Decoupling: Untracking & Ignoring nextGen_ATS
+
+### The Vibe (What & Why)
+**Analogy:** Spinning off a specialized high-performance engine division into its own independent aerospace company. Instead of carrying the entire specialized manufacturing workshop inside the main mothership fleet repository, the project is decoupled so it can be published and maintained as a standalone, open-source repository while keeping local files intact on disk for immediate independent git initialization.
+**Technical:**
+1. **Untracked `nextGen_ATS/` from Git Index:** Executed `git rm -r --cached nextGen_ATS` to revoke version tracking without deleting local code, models, or evaluations on disk.
+2. **Ignored in `.gitignore`:** Added `nextGen_ATS/` to `.gitignore` under Standalone Repositories to prevent accidental re-indexing into the main repo.
+3. **Remote Cleanliness:** Removed `nextGen_ATS` directory and its 23 source files from GitHub `main` branch.
+
+### The Prompt (How to talk to the AI)
+"revoke the nextGen_ATS folder i want to put it as new repo for an open source project so revoke it and put it into .git ignore and also delete it from my github"
+
+### The Blast Radius
+- **Git Tracking:** Untracked 23 files in `nextGen_ATS/` (preserved locally)
+- **Configuration:** Updated `.gitignore`
+- **Remote Repository:** Removed `nextGen_ATS/` from GitHub `main` branch
+- **Env Vars & DB Migrations:** None
+
+### The Snippet
+```bash
+# Untrack nextGen_ATS while preserving local disk files for standalone OSS repo setup
+git rm -r --cached nextGen_ATS
+echo -e "\n# Standalone OSS Repositories\nnextGen_ATS/" >> .gitignore
+```
 
 ## 2026-09-23 — NextGen ATS Packaging Standard, Skill Adjacency Engine & Contextual Coaching Upgrade
+
 
 ### The Vibe (What & Why)
 **Analogy:** Transitioning from a mechanic's duct-taped engine to an aviation-certified turbine. Instead of guessing driver capabilities with a single blurry dashboard number and repeating identical canned driving advice on every turn, the navigation system now separates exact current equipment (Day-1 Tool Match) from natural driving ability (Translatability Bridges), while giving bespoke telemetry tuning for every individual maneuver.
