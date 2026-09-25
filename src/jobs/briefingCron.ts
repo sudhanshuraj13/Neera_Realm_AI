@@ -30,6 +30,7 @@ export function initBriefingCron(bot: Bot): ScheduledTask {
       );
 
       for (const user of usersToBrief) {
+        if (!user.telegramId) continue;
         // Individual try/catch per user to ensure one failure doesn't block others (Law 9)
         try {
           const briefing = await generateDailyBriefing(user.id);

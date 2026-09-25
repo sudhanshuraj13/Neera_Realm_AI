@@ -9,9 +9,15 @@ datasource db {
 
 model User {
   id         String   @id @default(uuid())
-  telegramId BigInt   @unique
-  firstName  String
+  telegramId BigInt?  @unique
+  email      String?  @unique
+  firstName  String?
   username   String?
+  image      String?
+
+  // Cross-channel Telegram pairing token (15-min expiration)
+  telegramLinkToken   String?   @unique
+  telegramLinkExpires DateTime?
 
   // Google OAuth2 credentials
   googleId          String?   @unique
@@ -35,9 +41,10 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  preference UserPreference?
-  messages   Message[]
+  preference    UserPreference?
+  messages      Message[]
   fundingAlerts UserFundingAlert[]
+  applications  JobApplication[]
 
   @@map("users")
 }
@@ -47,7 +54,11 @@ model UserPreference {
   userId         String   @unique
   industries     String[] @default(["Finance"])
   watchlist      String[] @default(["AAPL", "NVDA", "TSLA"])
-  briefingTime   String   @default("08:00")
+  briefingTime   String   @default("19:00")
+  briefingWindow String   @default("18:00-20:00") // 6:00 PM - 8:00 PM default
+  briefingHour   Int      @default(19) // 7:00 PM default hour
+  targetDomains  String[] @default(["AI", "HealthTech", "FinTech", "SaaS"])
+  jobTypes       String[] @default(["Full-Time", "Internship"])
   onboardingDone Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -76,15 +87,18 @@ model Message {
 }
 
 model FundedStartup {
-  id           String   @id @default(cuid())
-  companyName  String
-  amountRaised String
-  fundingStage String
-  domain       String
-  summary      String   @db.Text
-  careersUrl   String?
-  sourceUrl    String   @unique
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(cuid())
+  companyName        String
+  amountRaised       String
+  fundingStage       String
+  domain             String
+  summary            String   @db.Text
+  careersUrl         String?
+  founderLinkedinUrl String?
+  companyLinkedinUrl String?
+  hrContactUrl       String?
+  sourceUrl          String   @unique
+  createdAt          DateTime @default(now())
 
   sentAlerts UserFundingAlert[]
 
@@ -102,4 +116,31 @@ model UserFundingAlert {
 
   @@unique([userId, startupId])
   @@map("user_funding_alerts")
+}
+
+enum ApplicationStatus {
+  SAVED
+  APPLIED
+  INTERVIEWING
+  OFFER
+  REJECTED
+}
+
+model JobApplication {
+  id        String            @id @default(uuid())
+  userId    String
+  company   String
+  roleTitle String
+  jobUrl    String?
+  atsScore  Float?
+  status    ApplicationStatus @default(SAVED)
+  appliedAt DateTime?
+  notes     String?           @db.Text
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("job_applications")
 }

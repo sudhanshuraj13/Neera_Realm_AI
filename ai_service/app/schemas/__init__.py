@@ -13,6 +13,7 @@ from .resume import (
     ResumeParseResponse,
 )
 from .job_listing import JobListing
+from .ats_score import ATSScoreRequest, ATSScoreResponse, GoogleXYZRewrite
 
 __all__ = [
     "CalendarEventSchema",
@@ -25,5 +26,8 @@ __all__ = [
     "ResumeParseRequest",
     "ResumeParseResponse",
     "JobListing",
+    "ATSScoreRequest",
+    "ATSScoreResponse",
+    "GoogleXYZRewrite",
 ]
 

@@ -26,12 +26,15 @@
 
 ## 🔮 Future Feature Roadmap
 
-### Phase 3: Pro Monetization & Automated Job Alerts
-- Stripe integration for `isPro` user subscriptions.
-- Background cron jobs sending real-time Telegram alerts when new jobs appear at user target dream companies.
-- Tailored resume review and critique recommendations per job posting.
+### 🌐 Phase 3: Web Platform Transformation & Core Career Engine
+*(Detailed Master Specification: [WEB_PLATFORM_TRANSFORMATION_PLAN.md](docs/WEB_PLATFORM_TRANSFORMATION_PLAN.md))*
+- **Phase 1 (Foundation)**: Schema decoupling (`telegramId?`, `email`, `experienceLevel`, `jobTypes`, `briefingWindow`), `JobApplication` model, Two-Tier Hybrid ATS Scorer (`all-MiniLM-L6-v2` + LLM), FastAPI CORS.
+- **Phase 2 (Shell & Auth)**: Vite + React 19 SPA, Tailwind CSS v4, Shadcn UI, Express Google OAuth session bridge.
+- **Phase 3 (Ingestion & Two-Tier Hybrid ATS)**: Drag-and-drop resume PDF upload, dual-dimension onboarding (Fresher/2+ YOE/3+ YOE x Internship/Full-Time), instant 30ms vector similarity gauge, and LLM recruiter "Why" critique editor.
+- **Phase 4 (Job Explorer, Timed Digests & Kanban)**: Live Greenhouse/Lever/Ashby job board, configurable evening alerts (6:00 PM – 8:00 PM), and drag-and-drop application pipeline.
+- **Phase 5 (Startup Funding Radar, Agent Hub & Pro Monetization)**: Real-time funding radar with domain matching (Healthcare, FinTech, AI) + Founder/HR LinkedIn links, 1-click Telegram pairing, Stripe Pro billing.
 
-### Phase 4: Full Multi-Modal AI Career Coach
-- Audio interview prep simulator.
-- Cold email / LinkedIn message generator tailored to job postings.
-- Auto-application tracking dashboard.
+### 🤖 Phase 4: Autonomous Application & Direct Founder Outreach Agent
+- **Automated Form Ingestion**: Autonomous agent assisting candidates in filling out external ATS application forms (Greenhouse, Lever, Ashby).
+- **Founder & HR Cold Outreach Engine**: 1-click AI generation and dispatch of tailored cold outreach emails and LinkedIn InMails citing startup funding rounds.
+- **Audio Interview Simulator**: Real-time voice prep simulator tailored to target company culture and job requirements.

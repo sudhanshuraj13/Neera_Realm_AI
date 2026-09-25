@@ -261,7 +261,7 @@ export class CalendarService {
         },
       });
 
-      if (!user || !user.accessToken) {
+      if (!user || !user.accessToken || !user.telegramId) {
         console.warn(`⚠️ [Calendar] Webhook received for unknown channel: ${channelId}`);
         return null;
       }

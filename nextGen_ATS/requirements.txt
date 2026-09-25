@@ -1,0 +1,19 @@
+# Core dependencies
+pydantic>=2.5.0
+numpy>=1.24.0
+
+# Natural Language Processing & Vector Embeddings
+sentence-transformers>=2.2.2
+torch>=2.0.0
+transformers>=4.38.0
+
+# Optional System-1 Decision Engine (Laya integration)
+laya>=0.1.0
+
+# Optional LLM qualitative feedback (Groq, Gemini, OpenAI)
+langchain-core>=0.1.0
+python-dotenv>=1.0.0
+
+# Development & Testing
+pytest>=7.4.0
+pytest-asyncio>=0.23.0

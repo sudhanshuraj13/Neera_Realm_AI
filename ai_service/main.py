@@ -35,6 +35,9 @@ from app.agents.resume_agent import parse_resume  # noqa: E402
 from app.agents.job_agent import match_jobs_for_resume  # noqa: E402
 from app.schemas import OrchestrateRequest, OrchestrateResponse  # noqa: E402
 from app.schemas.resume import ResumeParseRequest, ResumeParseResponse  # noqa: E402
+from app.schemas.ats_score import ATSScoreRequest, ATSScoreResponse  # noqa: E402
+from app.services.ats_scorer import score_resume_against_jd  # noqa: E402
+from app.services.funding_service import fetch_recent_funded_startups, FundedStartupItem  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging Configuration
@@ -261,6 +264,59 @@ async def jobs_match(payload: dict):
             status_code=500,
             detail={
                 "error": "Job matching failed",
+                "message": str(e),
+            },
+        )
+
+
+@app.post("/api/v1/resume/score", response_model=ATSScoreResponse)
+async def resume_score(request: ATSScoreRequest):
+    """
+    Two-Tier Hybrid ATS Scoring Endpoint.
+
+    Evaluates a candidate's Resume directly against a target Job Description (JD):
+      Tier 1: 30ms Vector Cosine Similarity via local sentence-transformers (all-MiniLM-L6-v2)
+      Tier 2: Qualitative Recruiter Diagnostic with Google-XYZ Bullet Rewrites (Groq / Gemini / OpenAI)
+    """
+    try:
+        return await score_resume_against_jd(request)
+    except Exception as e:
+        logger.error("❌ ATS scoring failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "ATS scoring failed",
+                "message": str(e),
+            },
+        )
+
+
+@app.get("/api/v1/funding/radar", response_model=list[FundedStartupItem])
+async def funding_radar(domain: str | None = None, hours: int = 48):
+    """
+    Startup Funding Radar Endpoint.
+
+    Fetches real-time newly funded ventures within the last 48 hours,
+    including executive & founder LinkedIn outreach URLs.
+    Optional ?domain= query param filters by domain (e.g. 'AI', 'HealthTech', 'FinTech').
+    """
+    try:
+        all_startups = await fetch_recent_funded_startups(hours=hours)
+        if not domain or domain.lower() in ["all", "generic"]:
+            return all_startups
+
+        domain_query = domain.lower()
+        filtered = [
+            s for s in all_startups
+            if domain_query in s.domain.lower() or domain_query in s.summary.lower()
+        ]
+        return filtered if filtered else all_startups
+    except Exception as e:
+        logger.error("❌ Funding radar query failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Funding radar query failed",
                 "message": str(e),
             },
         )

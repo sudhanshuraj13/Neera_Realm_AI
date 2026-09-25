@@ -32,6 +32,9 @@ class FundedStartupItem(BaseModel):
     domain: str = Field(default="Tech", description="Industry domain e.g. AI/ML, FinTech, HealthTech, Robotics")
     summary: str = Field(..., description="1-sentence summary of the funding and hiring focus")
     careers_url: str | None = Field(default=None, description="Direct or inferred careers page link")
+    founder_linkedin_url: str | None = Field(default=None, description="Direct search or verified founder LinkedIn URL")
+    company_linkedin_url: str | None = Field(default=None, description="Company LinkedIn profile URL")
+    hr_contact_url: str | None = Field(default=None, description="Talent lead / HR search URL")
     source_url: str = Field(..., description="Original news article link")
     published_at: str = Field(default="", description="ISO timestamp")
 
@@ -91,6 +94,7 @@ def _extract_funding_from_title(title: str, summary_text: str, link: str) -> Fun
         clean_summary = clean_summary[:197] + "..."
 
     item_id = f"fs_{hash(link) & 0xFFFFFFFF:08x}"
+    company_slug = re.sub(r"[^a-zA-Z0-9]+", "", company).lower()
 
     return FundedStartupItem(
         id=item_id,
@@ -100,6 +104,9 @@ def _extract_funding_from_title(title: str, summary_text: str, link: str) -> Fun
         domain=domain,
         summary=clean_summary or title,
         careers_url=link,
+        founder_linkedin_url=f"https://www.linkedin.com/search/results/people/?keywords={company}%20founder",
+        company_linkedin_url=f"https://www.linkedin.com/company/{company_slug}",
+        hr_contact_url=f"https://www.linkedin.com/search/results/people/?keywords={company}%20talent%20recruiter",
         source_url=link,
     )
 

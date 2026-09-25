@@ -1,0 +1,100 @@
+{
+  "scenario_a_structured": {
+    "scenario": "Structured Profile Evaluation",
+    "candidate_name": "Sudhanshu Raj",
+    "job_title": "Data Analyst",
+    "overall_ats_score": 62,
+    "execution_time_ms": 51673.58,
+    "tier0_knockout": {
+      "status": "PASSED",
+      "passed": true,
+      "reason": "All non-negotiable knockout criteria satisfied.",
+      "failed_criteria": []
+    },
+    "tier1_vector": {
+      "calibrated_score": 20
+    },
+    "tier2_laya": {
+      "seniority_fit": "appropriate",
+      "tech_translatability_score": 1,
+      "domain_relevance_score": 1,
+      "qualification_tier": "strong",
+      "decision_confidence": 0.0612,
+      "calibrated_laya_score": 84,
+      "latency_ms": 33035.83
+    },
+    "tier3_recruiter_dossier": {
+      "recommendation": "MANUAL_REVIEW",
+      "seniority_match": "Appropriate",
+      "keyword_stuffing_detected": false,
+      "stuffing_risk_level": "LOW",
+      "executive_summary": "Sudhanshu Raj (0.5 YOE vs 0.0 YOE required) demonstrated STRONG fit with a calibrated score of 62/100. Primary recommendation is MANUAL_REVIEW.",
+      "interview_questions": [
+        {
+          "topic": "Stack Translatability (Data Analysis)",
+          "question": "The position requires competencies in Data Analysis, while your background is centered on Python. How do your analytical and architectural skills translate to delivering measurable impact in Data Analysis?",
+          "what_to_look_for": "Look for structured problem-solving, domain adaptability, and demonstrated track record of rapid tooling acquisition."
+        },
+        {
+          "topic": "Production Scale & Resilience",
+          "question": "In your work as a AI & Backend Engineer, walk us through a critical production incident or bottleneck you diagnosed. What telemetry did you inspect, and how did you resolve it?",
+          "what_to_look_for": "Look for systematic root-cause analysis (metrics, profiling, distributed tracing) rather than trial-and-error."
+        }
+      ]
+    },
+    "tier3_candidate_coaching": {
+      "fit_tier": "Borderline Candidate (Bridge Gaps Before Applying)",
+      "matched_skills": [
+        "SQL"
+      ],
+      "missing_critical_skills": [
+        "Data Analysis",
+        "Tableau",
+        "PowerBI",
+        "Business Intelligence Dashboards",
+        "Structured Problem-Solving",
+        "Client Counterparts Collaboration",
+        "Quantitative Analysis",
+        "Reporting"
+      ],
+      "prioritized_recommendations": [
+        "Address High-Priority Skill Gaps: Feature projects demonstrating 'Data Analysis, Tableau, PowerBI'.",
+        "Quantify Business Metrics: Incorporate percentage improvements (e.g. latency, cost reduction, throughput) in at least 3 bullet points."
+      ],
+      "google_xyz_rewrites": [
+        {
+          "original": "Spearheaded backend development for Clinixs SaaS by architecting a secure PII-stripping Supabase data layer ensuring 100% DPDP compliance",
+          "rewritten": "Spearheaded backend development for Clinixs SaaS by architecting a secure PII-stripping Supabase data layer ensuring 100% DPDP compliance, reducing p99 API latency by [20-35%] and sustaining [10k+] daily transactions using Data Analysis.",
+          "impact": "Applied Google-XYZ formula: quantified backend execution with p99 latency reduction and transaction volume."
+        },
+        {
+          "original": "Launched 'Meera' AI chatbot powered by LLM function calling, reducing clinician administrative overhead by 30%",
+          "rewritten": "Launched 'Meera' AI chatbot powered by LLM function calling, reducing clinician administrative overhead by 30%, achieving [95%+ accuracy] and reducing manual operational review by [40%] through automated inference.",
+          "impact": "Applied Google-XYZ formula: added model evaluation benchmarks (accuracy) and human-in-the-loop labor reduction."
+        },
+        {
+          "original": "Engineered automated prescription digitization pipeline via Tesseract OCR, decreasing manual entry errors by 40%",
+          "rewritten": "Engineered automated prescription digitization pipeline via Tesseract OCR, decreasing manual entry errors by 40%, cutting data ingestion turnaround from [hours to minutes] and powering automated business intelligence reports.",
+          "impact": "Applied Google-XYZ formula: framed data engineering with turnaround time reduction and downstream BI enablement."
+        }
+      ],
+      "ats_readiness_checklist": [
+        "Single-column plain text format (tables and multi-column layouts break legacy parsers).",
+        "Target keywords embedded directly in context within project experience bullets.",
+        "Clear date formatting (Month Year \u2013 Month Year) for automated seniority parsing.",
+        "PDF exported directly from digital document (avoid scanned images or non-selectable text)."
+      ]
+    }
+  },
+  "scenario_b_quick_scan": {
+    "scenario": "Raw Text Quick Scan",
+    "overall_ats_score": 67,
+    "execution_time_ms": 4206.71,
+    "vector_score": 35,
+    "laya_score": 84,
+    "laya_tier": "strong",
+    "recruiter_recommendation": "MANUAL_REVIEW"
+  },
+  "distilled_candidate": "Role: AI & Backend Engineer\nExperience: 0.5 years\nSkills: Python, TypeScript, JavaScript, SQL, C/C++, Node.js, Next.js, Express.js, REST APIs, Data Ingestion Pipelines, PostgreSQL, Supabase, Vector Stores, Prisma ORM, Retrieval-Augmented Generation (RAG), LangChain, Prompt Engineering, Vector Search, ETL/ELT, Model Context Protocol (MCP)\nLocation: India\nAccomplishments: Spearheaded backend development for Clinixs SaaS by architecting a secure PII-stripping Supabase data layer ensuring 100% DPDP compliance. | Launched 'Meera' AI chatbot powered by LLM function calling, reducing clinician administrative overhead by 30%. | Engineered automated prescription digitization pipeline via Tesseract OCR, decreasing manual entry errors by 40%. | Optimized core database queries and API endpoints, resulting in a 20% improvement in load times across patient management modules",
+  "distilled_job": "Target Role: Data Analyst\nMinimum Experience: 0.0 years\nRequired Skills: Data Analysis, Tableau, PowerBI, Business Intelligence Dashboards, Structured Problem-Solving, Client Counterparts Collaboration, Quantitative Analysis, SQL, Reporting\nPreferred Skills: Management Consulting, Playbook Development, Research and Knowledge Building, Digital Strategy, Process Management\nDomain: Management Consulting & Data Science Analytics\nCore Requirements: Job Description NeenOpal is looking for exceptional talent to join our rapidly growing global team. People are our biggest perk! Our transparent and collaborative culture offers a chance to work with some of the brightest minds in the industry. If you are someone who thrives on ambiguity, is a problem solver, and yet deliver value to clients, please apply for the position Position Description As a Data Analyst, you will work with our Senior Associate Consultants and be a part of the project deli"
+}

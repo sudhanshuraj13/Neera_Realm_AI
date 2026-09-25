@@ -85,7 +85,7 @@ export function registerSettingsHandlers(bot: Bot): void {
     const briefingTime = user.preference.briefingTime ?? "08:00";
     const industries = user.preference.industries ?? ["Finance"];
 
-    const html = renderSettingsHtml(user.firstName, watchlist, briefingTime, industries);
+    const html = renderSettingsHtml(user.firstName ?? "User", watchlist, briefingTime, industries);
     const keyboard = buildSettingsKeyboard(watchlist, briefingTime);
 
     await sendSafeTelegramMessage(ctx, html, {
@@ -110,7 +110,7 @@ export function registerSettingsHandlers(bot: Bot): void {
     const briefingTime = user.preference.briefingTime ?? "08:00";
     const industries = user.preference.industries ?? ["Finance"];
 
-    const html = renderSettingsHtml(user.firstName, watchlist, briefingTime, industries);
+    const html = renderSettingsHtml(user.firstName ?? "User", watchlist, briefingTime, industries);
     const keyboard = buildSettingsKeyboard(watchlist, briefingTime);
 
     await ctx.editMessageText(html, {
@@ -164,7 +164,7 @@ export function registerSettingsHandlers(bot: Bot): void {
     });
 
     const html = renderSettingsHtml(
-      user.firstName,
+      user.firstName ?? "User",
       updatedPref.watchlist,
       updatedPref.briefingTime,
       updatedPref.industries
@@ -203,7 +203,7 @@ export function registerSettingsHandlers(bot: Bot): void {
     });
 
     const html = renderSettingsHtml(
-      user.firstName,
+      user.firstName ?? "User",
       updatedPref.watchlist,
       updatedPref.briefingTime,
       updatedPref.industries
